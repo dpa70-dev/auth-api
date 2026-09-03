@@ -1,0 +1,630 @@
+openapi: 3.1.0
+info:
+  title: API Signup/Login
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    API REST de ejemplo para registro y autenticación: registro y login con email/contraseña,
+    login con Google (OIDC — GIS token flow), refresh con rotación, logout y acceso a un recurso
+    protegido.
+
+    **Contrato de la Fase 2 de Spec Driven Development** — derivado de las historias de usuario
+    (`01-historias-de-usuario.md`, US-01 a US-08) y de las consideraciones técnicas
+    (`00-consideraciones-tecnicas.md`). La representación gráfica de los flujos está en
+    `02-flujos-registro-autenticacion.md`.
+
+    Reglas transversales del contrato:
+
+    - Envelope único: éxito `{ "data": ... }`; error `{ "error": { code, message, details?, requestId } }`.
+    - `400` = JSON/header malformado · `422` = validación de negocio (zod, con `details` por campo) ·
+      `409` = conflicto de identidad (nunca auto-linking) · `429` = rate limit (con `Retry-After`) ·
+      `404`/`405` = ruta/verbo inexistentes · `500` = error interno genérico con `requestId`.
+    - `401` de autenticación: mensajes genéricos e idénticos (anti-enumeración); jamás se revela si un
+      email existe.
+    - Access token: JWT HS256 con vigencia de 5-15 min; el algoritmo se fija en el servidor (nunca se
+      confía en el header `alg`).
+    - Refresh token: opaco, 7-30 días, guardado en BD como hash SHA-256; rotación en cada uso y
+      detección de reuso (un refresh presentado dos veces revoca toda la familia).
+    - Contraseñas (NIST 800-63B): mín. 8, máx. 64, sin reglas de complejidad; solo hash argon2id en reposo.
+    - El ID token de Google viaja en el body, nunca como `Authorization`.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Desarrollo local
+tags:
+  - name: Auth
+    description: Operaciones de registro, autenticación y gestión de sesión
+security: []
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Registro de usuario local (email + contraseña)
+      description: |
+        Crea un usuario local (US-01). La unicidad del email se garantiza a nivel de base de datos:
+        dos registros simultáneos dan un 201 y el otro 409. Si el email ya pertenece a una cuenta
+        solo-Google se responde 409 `ACCOUNT_EXISTS_WITH_GOOGLE` (el cliente sugiere entrar con
+        Google); si pertenece a una cuenta local, 409 `EMAIL_ALREADY_EXISTS` (sin auto-linking, US-08).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+            examples:
+              valido:
+                summary: Payload válido
+                value:
+                  email: ana@example.com
+                  password: contraseñaSegura123
+      responses:
+        '201':
+          description: Usuario creado; se devuelve el par de tokens y el perfil público.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Alta correcta (US-01 AC-01/AC-02)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTA3MCwiZXhwIjoxNzg3ODcwNDcwLCJuYmYiOjE3ODc4NjkwNzAsImp0aSI6ImEwMWI1Y2NjIn0.ejemplo_firma
+                      refreshToken: v4.local.ejemplo-opaco-solo-server
+                      user:
+                        id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                        email: ana@example.com
+                        createdAt: '2026-08-27T10:15:30.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflicto de identidad — el email ya está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                cuenta-solo-google:
+                  summary: El email ya pertenece a una cuenta solo-Google (US-08 AC-01/AC-05)
+                  value:
+                    error:
+                      code: ACCOUNT_EXISTS_WITH_GOOGLE
+                      message: Ya existe una cuenta con este email usando Google. Entrá con Google.
+                      details:
+                        - field: provider
+                          issue: google
+                      requestId: req_01J4X8K2YQ
+                cuenta-solo-local:
+                  summary: El email ya pertenece a una cuenta local
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_EXISTS
+                      message: Ya existe una cuenta con este email.
+                      details:
+                        - field: provider
+                          issue: local
+                      requestId: req_01J4X8K2YR
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Inicio de sesión local (email + contraseña)
+      description: |
+        Autentica credenciales locales y devuelve el par de tokens (US-02). Anti-enumeración: email
+        inexistente y contraseña incorrecta producen exactamente el mismo 401 `INVALID_CREDENTIALS`, y
+        el tiempo de respuesta no delata si el email existe (verificación contra hash ficticio). La
+        colisión con Google (US-08 AC-04) no se revela aquí: siempre 401 genérico.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+            examples:
+              valido:
+                value:
+                  email: ana@example.com
+                  password: contraseñaSegura123
+      responses:
+        '200':
+          description: Credenciales correctas; par de tokens y perfil público.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Sesión iniciada (US-02 AC-01/AC-05)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTEwMCwiZXhwIjoxNzg3ODcwNTAwLCJuYmYiOjE3ODc4NjkxMDAsImp0aSI6ImIwMmM2ZGRkIn0.ejemplo_firma
+                      refreshToken: v4.local.ejemplo-opaco-solo-server
+                      user:
+                        id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                        email: ana@example.com
+                        createdAt: '2026-08-27T10:15:30.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedInvalidCredentials'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshTokens
+      summary: Refrescar el par de tokens con rotación
+      description: |
+        Intercambia un refresh válido y vigente por un par NUEVO (US-03). Cada refresco invalida el
+        token usado (rotación). Si se presenta un refresh ya usado (reuso), la respuesta es el mismo
+        401 genérico Y se revoca TODA la familia de refresh del usuario (el atacante no debe saber
+        que el reuso fue detectado).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              valido:
+                value:
+                  refreshToken: v4.local.ejemplo-opaco-solo-server
+      responses:
+        '200':
+          description: Par de tokens nuevo; el refresh anterior queda invalidado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              examples:
+                ok:
+                  summary: Rotación correcta (US-03 AC-01/AC-02)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTEyMCwiZXhwIjoxNzg3ODcwNTIwLCJuYmYiOjE3ODc4NjkxMjAsImp0aSI6ImMwM2Q3ZWVlIn0.ejemplo_firma
+                      refreshToken: v4.local.nuevo-par-tras-rotacion
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedGeneric'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Cerrar sesión (revocar refresh)
+      description: |
+        Revoca el refresh en base (US-04). El access vigente no se revoca explícitamente: expira solo
+        por su corta vida (5-15 min, comportamiento esperado). Si el refresh revocado se presenta
+        después en /refresh, el reuso revoca toda la familia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              valido:
+                value:
+                  refreshToken: v4.local.ejemplo-opaco-solo-server
+      responses:
+        '204':
+          description: Refresh revocado correctamente (US-04 AC-01).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedGeneric'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/google:
+    post:
+      tags: [Auth]
+      operationId: loginGoogle
+      summary: Iniciar sesión con Google (OIDC — GIS token flow)
+      description: |
+        Intercambia un ID token de Google por el par de tokens del proyecto (US-07). La verificación es
+        estrictamente server-side con jose contra el JWKS de accounts.google.com (caché): `aud` =
+        client_id configurado, `iss` = accounts.google.com, `iat`/`exp` en ventana, algoritmo RS256
+        fijado. **Anti-replay (nonce)**: si el ID token incluye el claim `nonce`, el campo `nonce` del
+        body ES obligatorio y DEBE coincidir — si no, 401 `UNAUTHORIZED`; si el ID token no incluye
+        `nonce`, el campo `nonce` del body se ignora. El claim `email_verified` debe ser `true`, si no →
+        401 `EMAIL_NOT_VERIFIED`. Primer inicio = alta implícita (email de Google, sin contraseña,
+        `email_verified = 1`). Si el email ya existe como usuario solo-local → 409 `EMAIL_ALREADY_EXISTS`
+        sin auto-linking (US-08 AC-02). La sesión usa NUESTROS refresh tokens (misma rotación/reuso).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleRequest'
+            examples:
+              valido:
+                summary: ID token firmado por Google (RS256) + nonce anti-replay
+                value:
+                  idToken: eyJhbGciOiJSUzI1NiIsImtpZCI6InNpZ25pbmcta2V5LTEifQ.ejemplo-claims-google.ejemplo-firma
+                  nonce: vZ3mX9qK2rT8wY5bN1cL7pD0sF4hJ6a
+      responses:
+        '200':
+          description: Sesión iniciada; mismo contrato que /login (el cliente no distingue el proveedor).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Sesión Google iniciada (US-07 AC-01/AC-02/AC-05)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZDEwYjNjNC01ZTdmLTQxOWEtYjQ1Ni03ZmFiOGNkOWUwZjQiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTE0MCwiZXhwIjoxNzg3ODcwNTQwLCJuYmYiOjE3ODc4NjkxNDAsImp0aSI6ImQwNGU4ZmZmIn0.ejemplo_firma
+                      refreshToken: v4.local.sesion-google-nuestro-refresh
+                      user:
+                        id: 8d10b3c4-5e7f-419a-b456-7fab8cd9e0f4
+                        email: carlos@gmail.com
+                        createdAt: '2026-08-27T10:20:00.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: ID token de Google inválido o email no verificado — verificación server-side.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                token-invalido:
+                  summary: Falla de verificación (aud, iss, exp/iat, RS256, firma o nonce)
+                  value:
+                    error:
+                      code: UNAUTHORIZED
+                      message: Token de Google inválido.
+                      requestId: req_01J4X8K2YT
+                email-no-verificado:
+                  summary: email_verified no es true (US-07 AC-04)
+                  value:
+                    error:
+                      code: EMAIL_NOT_VERIFIED
+                      message: El email no está verificado en Google.
+                      requestId: req_01J4X8K2YU
+        '409':
+          description: Conflicto de identidad — el email ya pertenece a una cuenta solo-local.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                cuenta-solo-local:
+                  summary: Sin auto-linking (US-08 AC-02/AC-05)
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_EXISTS
+                      message: Ya existe una cuenta con este email usando email y contraseña.
+                      details:
+                        - field: provider
+                          issue: local
+                      requestId: req_01J4X8K2YV
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Recurso protegido — datos del usuario autenticado
+      description: |
+        Devuelve los datos del usuario autenticado por el access token (US-05). El recurso responde
+        SOLO con datos del propio token (nunca de otro usuario). Forma de 401 idéntica para token
+        ausente, malformado, vencido o con firma inválida (el algoritmo de verificación está fijado,
+        nunca se toma del header `alg`).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Datos del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              examples:
+                ok:
+                  summary: Perfil del token (US-05 AC-01/AC-04)
+                  value:
+                    data:
+                      id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                      email: ana@example.com
+                      createdAt: '2026-08-27T10:15:30.000Z'
+        '401':
+          $ref: '#/components/responses/UnauthorizedGeneric'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token JWT HS256 (5-15 min). El algoritmo de verificación se fija en el servidor.
+  schemas:
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+      description: Email normalizado a minúsculas (Value Object del dominio, sección 6.1).
+      example: ana@example.com
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 64
+      description: NIST 800-63B — por longitud, sin reglas de complejidad. Solo hash argon2id en reposo.
+      example: contraseñaSegura123
+    CredentialsRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        password:
+          $ref: '#/components/schemas/Password'
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      additionalProperties: false
+      properties:
+        refreshToken:
+          $ref: '#/components/schemas/RefreshToken'
+    GoogleRequest:
+      type: object
+      required: [idToken]
+      additionalProperties: false
+      properties:
+        idToken:
+          type: string
+          description: ID token JWT RS256 firmado por Google (accounts.google.com). Viaja en el body, nunca como Authorization (US-07).
+          example: eyJhbGciOiJSUzI1NiIsImtpZCI6InNpZ25pbmcta2V5LTEifQ.ejemplo-claims.ejemplo-firma
+        nonce:
+          type: string
+          description: |
+            Nonce de alta entropía generado por el cliente (app/web) y usado al solicitar el ID token a Google.
+            Anti-replay: si el ID token incluye el claim `nonce`, este campo es obligatorio y DEBE coincidir
+            (si no → 401 UNAUTHORIZED); si el ID token no lo incluye, se ignora. Opcional en el schema por el
+            flujo condicional de Google (no siempre emite nonce), no porque sea prescindible cuando sí existe.
+          example: vZ3mX9qK2rT8wY5bN1cL7pD0sF4hJ6a
+    AccessToken:
+      type: string
+      description: |
+        JWT HS256 del proyecto. Claims: sub (users.id), iss, aud, exp, iat, nbf y jti.
+        Vigencia 5-15 min. Algoritmo fijado en el servidor (jamás del header alg).
+      example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ejemplo.ejemplo_firma
+    RefreshToken:
+      type: string
+      description: |
+        Token opaco (no-JWT) con vigencia de 7-30 días. El servidor guarda solo su hash SHA-256 + jti;
+        se rota en cada refresh y el reuso revoca toda la familia.
+      example: v4.local.ejemplo-opaco-solo-server
+    UserPublic:
+      type: object
+      required: [id, email, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID v4 de users.id (nunca una clave autoincremental).
+          example: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+        email:
+          $ref: '#/components/schemas/Email'
+        createdAt:
+          type: string
+          format: date-time
+          description: Fecha de alta del usuario.
+          example: '2026-08-27T10:15:30.000Z'
+    AuthResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [accessToken, refreshToken, user]
+          additionalProperties: false
+          properties:
+            accessToken:
+              $ref: '#/components/schemas/AccessToken'
+            refreshToken:
+              $ref: '#/components/schemas/RefreshToken'
+            user:
+              $ref: '#/components/schemas/UserPublic'
+    RefreshResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [accessToken, refreshToken]
+          additionalProperties: false
+          properties:
+            accessToken:
+              $ref: '#/components/schemas/AccessToken'
+            refreshToken:
+              $ref: '#/components/schemas/RefreshToken'
+    UserResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/UserPublic'
+    ValidationIssue:
+      type: object
+      required: [field, issue]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: Campo del payload que falló la validación.
+          example: email
+        issue:
+          type: string
+          description: Identificador estable del problema (zod).
+          example: invalid_email
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              description: |
+                Identificador estable y programable. Complemento del catálogo de US-06: los códigos
+                documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
+                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED y RATE_LIMITED; UNAUTHORIZED y
+                MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren
+                el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
+              enum:
+                - VALIDATION_ERROR
+                - INVALID_CREDENTIALS
+                - EMAIL_ALREADY_EXISTS
+                - ACCOUNT_EXISTS_WITH_GOOGLE
+                - EMAIL_NOT_VERIFIED
+                - RATE_LIMITED
+                - UNAUTHORIZED
+                - MALFORMED_REQUEST
+                - NOT_FOUND
+                - METHOD_NOT_ALLOWED
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración).
+            details:
+              type: array
+              description: Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409.
+              items:
+                $ref: '#/components/schemas/ValidationIssue'
+            requestId:
+              type: string
+              description: Correlación con los logs estructurados (pino-http, doc 00 → ítem 11).
+              example: req_01J4X8K2YQ
+  responses:
+    BadRequest:
+      description: JSON/body malformado o header inválido — envelope sin detalles internos.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            malformado:
+              value:
+                error:
+                  code: MALFORMED_REQUEST
+                  message: El cuerpo de la petición no es JSON válido.
+                  requestId: req_01J4X8K2YW
+    UnauthorizedGeneric:
+      description: |
+        No autenticado: token ausente, malformado, vencido o con firma no verificada. Respuesta
+        idéntica en forma para todos los casos (nunca revela la causa exacta). En /refresh, el reuso
+        detectado responde igual pero además revoca toda la familia (US-03 AC-03).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            no-autenticado:
+              value:
+                error:
+                  code: UNAUTHORIZED
+                  message: No autenticado.
+                  requestId: req_01J4X8K2YX
+    UnauthorizedInvalidCredentials:
+      description: |
+        Credenciales incorrectas — idéntico para email inexistente y contraseña equivocada
+        (anti-enumeración, doc 00 → ítem 41).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            credenciales-invalidas:
+              value:
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: Credenciales inválidas.
+                  requestId: req_01J4X8K2YY
+    ValidationError:
+      description: Falla de validación de negocio (zod) — details por campo, preceden a cualquier verificación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            campos-invalidos:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: La petición no cumple las reglas de validación.
+                  details:
+                    - field: email
+                      issue: invalid_email
+                    - field: password
+                      issue: too_short
+                  requestId: req_01J4X8K2YZ
+    RateLimited:
+      description: Rate limit excedido (registro/login/refresh/google; por IP, y también por email en login).
+      headers:
+        Retry-After:
+          description: Segundos antes de poder reintentar.
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+          example: 60
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            excedido:
+              value:
+                error:
+                  code: RATE_LIMITED
+                  message: Demasiados intentos. Reintentá más tarde.
+                  requestId: req_01J4X8K2Z0
+    InternalError:
+      description: Error inesperado o de infraestructura — jamás stack traces, rutas internas ni valores sensibles (doc 00 → ítem 20).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            interno:
+              value:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Error interno del servidor.
+                  requestId: req_01J4X8K2Z1
