@@ -9,6 +9,7 @@ export const LOG_EVENTS = {
   USER_REGISTERED: 'user_registered',
   USER_LOGGED_IN: 'user_logged_in',
   USER_LOGGED_OUT: 'user_logged_out',
+  USER_PROFILE_FETCHED: 'user_profile_fetched',
   TOKENS_REFRESHED: 'tokens_refreshed',
   REFRESH_REUSE_DETECTED: 'refresh_reuse_detected',
   LOGIN_FAILED: 'login_failed',

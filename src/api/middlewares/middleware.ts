@@ -11,12 +11,15 @@ export type RequestContext = {
   run: <T>(store: { requestId: string }, cb: () => T) => T;
 };
 
+/** Formato aceptado de x-request-id: alnum + `_ -`/`-`, 1..64 — evita log poisoning con headers arbitrarios. */
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
 /** Factory de la config de pino-http (doc 00 → ítem 11): log por request, requestId del contrato. */
 export const httpLoggerConfig = (rawLogger: PinoInstance): HttpLoggerOptions => ({
   logger: rawLogger,
   genReqId: (req) => {
     const incoming = req.headers['x-request-id'];
-    return typeof incoming === 'string' && incoming.length > 0 ? incoming : `req_${randomUUID()}`;
+    return typeof incoming === 'string' && REQUEST_ID_PATTERN.test(incoming) ? incoming : `req_${randomUUID()}`;
   },
   customAttributeKeys: { reqId: 'requestId' },
   customLogLevel: (_req, res, err) => {

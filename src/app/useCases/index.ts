@@ -5,3 +5,4 @@ export { Logout, type LogoutCommand } from './logout.js';
 export { LoginGoogle, type LoginGoogleCommand, type LoginGoogleResult } from './loginGoogle.js';
 export { RequestMagicLink, type RequestMagicLinkCommand, type RequestMagicLinkResult } from './requestMagicLink.js';
 export { ConsumeMagicLink, type ConsumeMagicLinkCommand, type ConsumeMagicLinkResult } from './consumeMagicLink.js';
+export { GetMe, type GetMeCommand, type GetMeResult } from './getMe.js';

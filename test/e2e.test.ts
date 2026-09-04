@@ -124,6 +124,33 @@ describe('US-01 — registro local', () => {
     const { error } = await readJson<{ error: ErrorData }>(res);
     expect(error.code).toBe('METHOD_NOT_ALLOWED');
   });
+
+  // El trailing slash no es un caso especial de /auth/me: strict routing off hace que
+  // Express ignore el slash al matchear handlers, pero el middleware 405 lo recibe intacto
+  // en req.path. El fix normaliza el path en TODAS las rutas → método equivocado + '/'
+  // siempre da 405 (nunca cae a 404).
+  it.each([
+    ['GET', '/auth/register/'],
+    ['GET', '/auth/login/'],
+    ['GET', '/auth/refresh/'],
+    ['GET', '/auth/logout/'],
+    ['GET', '/auth/google/'],
+    ['GET', '/auth/magic-link/request/'],
+    ['GET', '/auth/magic-link/consume/'],
+    ['POST', '/auth/me/'],
+  ])('405 METHOD_NOT_ALLOWED con trailing slash: %s %s → 405, no 404', async (method, path) => {
+    const res = await fetch(`${ctx.baseUrl}${path}`, { method });
+    expect(res.status).toBe(405);
+    const { error } = await readJson<{ error: ErrorData }>(res);
+    expect(error.code).toBe('METHOD_NOT_ALLOWED');
+  });
+
+  it('404 con trailing slash en ruta inexistente (la normalización no la inventa)', async () => {
+    const res = await get(`${ctx.baseUrl}/auth/inexistente/`);
+    expect(res.status).toBe(404);
+    const { error } = await readJson<{ error: ErrorData }>(res);
+    expect(error.code).toBe('NOT_FOUND');
+  });
 });
 
 describe('US-02 — login local (anti-enumeración)', () => {

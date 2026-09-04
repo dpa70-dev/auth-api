@@ -15,12 +15,12 @@ const authLimiter = (config: Config) =>
     limit: config.rateLimit.authMax,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    handler: (_req, res) => {
+    handler: (req, res) => {
       res.status(429).set('Retry-After', String(config.rateLimit.authWindowMs / 1000)).json({
         error: {
           code: ErrorCodes.RATE_LIMITED,
           message: ERROR_MESSAGES[ErrorCodes.RATE_LIMITED],
-          requestId: res.req.requestId ?? 'req_unknown',
+          requestId: req.requestId ?? 'req_unknown',
         },
       });
     },
@@ -51,8 +51,10 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
 
   // Express 5 NO produce error `method_not_allowed` por sí solo cuando la ruta
   // existe pero el método no: emite el error aquí para que el handler final dé 405.
+  // Normaliza el trailing slash: POST /auth/me/ es la MISMA ruta que POST /auth/me → 405.
   router.use((req, _res, next) => {
-    const allowed = ALLOWED_METHODS[req.path];
+    const path = req.path.replace(/\/+$/, '');
+    const allowed = ALLOWED_METHODS[path];
     if (allowed && !allowed.includes(req.method)) {
       next(Object.assign(new Error('Method Not Allowed'), { type: ERROR_KIND_METHOD_NOT_ALLOWED }));
       return;

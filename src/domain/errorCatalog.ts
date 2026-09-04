@@ -35,7 +35,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   MAGIC_LINK_INVALID: 'Enlace de acceso inválido o expirado.',
   RATE_LIMITED: 'Demasiados intentos. Reintentá más tarde.',
   UNAUTHORIZED: 'No autenticado.',
-  MALFORMED_REQUEST: 'El cuerpo de la petición no es JSON válido.',
+  MALFORMED_REQUEST: 'El cuerpo de la petición es inválido o excede el tamaño permitido.',
   NOT_FOUND: 'Recurso no encontrado.',
   METHOD_NOT_ALLOWED: 'Método no permitido.',
   INTERNAL_ERROR: 'Error interno del servidor.',

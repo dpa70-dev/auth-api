@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
@@ -32,7 +33,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     const email = emailSchema.parse(cmd.email);
     const plain = plainPasswordSchema.parse(cmd.password);
     const now = cmd.now ?? new Date();
-    const id = userIdSchema.parse(crypto.randomUUID());
+    const id = userIdSchema.parse(randomUUID());
 
     const existing = await this.users.findByEmail(email);
     if (existing) throw collisionError(existing);

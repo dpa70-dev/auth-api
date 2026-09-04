@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
@@ -53,7 +54,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
       });
     }
 
-    const id = userIdSchema.parse(crypto.randomUUID());
+    const id = userIdSchema.parse(randomUUID());
     try {
       await this.users.createUser({
         id,

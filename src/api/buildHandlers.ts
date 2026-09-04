@@ -21,5 +21,5 @@ export type Handlers = {
 export const buildHandlers = (useCases: UseCases, deps: ApiDeps): Handlers => ({
   ...buildAuthHandlers(useCases, deps),
   ...buildMagicLinkHandlers(useCases, deps),
-  ...buildMeHandler(deps),
+  ...buildMeHandler(useCases),
 });

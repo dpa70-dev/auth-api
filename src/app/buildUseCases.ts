@@ -16,6 +16,7 @@ import {
   LoginGoogle,
   RequestMagicLink,
   ConsumeMagicLink,
+  GetMe,
 } from './useCases/index.js';
 
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
@@ -36,6 +37,7 @@ export type UseCases = {
   logout: Logout;
   requestMagicLink: RequestMagicLink;
   consumeMagicLink: ConsumeMagicLink;
+  me: GetMe;
   /** null ⇔ GOOGLE_CLIENT_ID no configurado: la ruta existe pero responde 500 explícito. */
   loginGoogle: LoginGoogle | null;
 };
@@ -55,5 +57,6 @@ export const buildUseCases = (
   logout: new Logout(users, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
   consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, logger),
+  me: new GetMe(users, logger),
   loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger),
 });
