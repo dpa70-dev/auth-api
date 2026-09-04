@@ -11,13 +11,14 @@
 ```mermaid
 erDiagram
     users ||--o{ refresh_tokens : "posee"
+    users ||--o{ magic_links : "solicita"
 
     users {
         text id PK "UUID v4"
         text email UK "normalizado · ≤ 254"
-        text password_hash "argon2id · NULL si solo-Google"
+        text password_hash "argon2id · NULL si solo-Google/solo-magic"
         text google_sub UK "NULL si solo-local"
-        int email_verified "0 · 1 (Google)"
+        int email_verified "0 · 1 (Google y vía magic link)"
         text created_at "ISO 8601 UTC"
     }
 
@@ -27,8 +28,17 @@ erDiagram
         text user_id FK "users.id"
         text family_id "familia de rotación"
         text status "active · used · revoked"
-        text provider "local · google · opcional"
+        text provider "local · google · magic"
         text expires_at "ISO 8601 UTC · 7-30 días"
+        text created_at "ISO 8601 UTC"
+    }
+
+    magic_links {
+        text id PK "UUID v4"
+        text token_hash UK "SHA-256 del enlace opaco"
+        text email "destinatario (normalizado)"
+        text status "pending · used · revoked"
+        text expires_at "ISO 8601 UTC · TTL corto (15 min default)"
         text created_at "ISO 8601 UTC"
     }
 ```
@@ -38,15 +48,16 @@ erDiagram
 ## 2. DDL SQLite (normalizado)
 
 ```sql
--- users: identidad única multicanal (local y/o Google)
+-- users: identidad única multicanal (local y/o Google y/o magic)
 CREATE TABLE users (
   id             TEXT PRIMARY KEY,                                -- UUID v4 (VOs: UserId)
   email          TEXT NOT NULL UNIQUE,                            -- normalizado, <= 254 (VOs: Email)
-  password_hash  TEXT,                                            -- argon2id m=19456 t=2 p=1 (VOs: PasswordHash)
+  password_hash  TEXT,                                            -- argon2id m=19456 t=2 p=1 (VOs: PasswordHash); NULL si solo-Google/magic
   google_sub     TEXT UNIQUE,                                     -- sub de Google (VOs: GoogleSub)
   email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1)),
   created_at     TEXT NOT NULL,                                   -- ISO 8601 UTC
-  CHECK (password_hash IS NOT NULL OR google_sub IS NOT NULL)     -- al menos una identidad
+  -- al menos una identidad (local/Google) o email ya verificado vía magic link:
+  CHECK (password_hash IS NOT NULL OR google_sub IS NOT NULL OR email_verified = 1)
 ) STRICT;
 
 -- refresh_tokens: sesiones de refresco (rotación + reuso + logout)
@@ -56,14 +67,26 @@ CREATE TABLE refresh_tokens (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   family_id  TEXT NOT NULL,                                       -- familia de rotación; en este diseño family_id = user_id
   status     TEXT NOT NULL CHECK (status IN ('active', 'used', 'revoked')),
-  provider   TEXT CHECK (provider IN ('local', 'google')),        -- origen de la sesión (informacional)
+  provider   TEXT CHECK (provider IN ('local', 'google', 'magic')), -- origen de la sesión (informacional)
   expires_at TEXT NOT NULL,                                       -- vigencia 7-30 días (ISO 8601 UTC)
   created_at TEXT NOT NULL,                                       -- ISO 8601 UTC
   FOREIGN KEY (family_id) REFERENCES users(id)
 ) STRICT;
 
+-- magic_links: enlaces de acceso sin contraseña (US-09/US-10)
+CREATE TABLE magic_links (
+  id         TEXT PRIMARY KEY,                                    -- UUID v4 (VOs: MagicLinkId)
+  token_hash TEXT NOT NULL UNIQUE,                                -- SHA-256 del enlace opaco
+  email      TEXT NOT NULL,                                       -- destinatario normalizado (VOs: Email)
+  status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')),
+  expires_at TEXT NOT NULL,                                       -- TTL corto: 15 min default (MAGIC_LINK_TTL_MINUTES)
+  created_at TEXT NOT NULL                                        -- ISO 8601 UTC
+) STRICT;
+
 CREATE INDEX idx_refresh_tokens_user_id   ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_family_id ON refresh_tokens(family_id);
+CREATE INDEX idx_magic_links_email   ON magic_links(email);
+CREATE INDEX idx_magic_links_status  ON magic_links(status);
 ```
 
 Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
@@ -106,6 +129,17 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `expires_at` | doc 00 → nº 38 (vigencia 7-30 días); US-03 AC-04 (vencido → 401) |
 | `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD) |
 
+### `magic_links`
+
+| Columna | Fuente |
+|---|---|
+| `id` | convención `id UUID v4` (doc 00 → nº 45) aplicada a los enlaces |
+| `token_hash` | US-09 AC-03 (persistir solo el **hash** SHA-256 del enlace opaco). **UNIQUE** derivado: `findByTokenHash(sha256(token))` debe resolver un único enlace (diagrama magic link) |
+| `email` | US-09 AC-01 (destinatario; el enlace se emite para un email conocido por el servidor tras generar el token) |
+| `status` | US-10 AC-04 (`used` tras un consumo → un solo uso); `revoked` reservado para revocación manual futura; `pending` inicial. Un único enum evita estados imposibles (mismo racional que `refresh_tokens.status`, decisión 3) |
+| `expires_at` | US-09 AC-04 (TTL corto, default 15 min; vencido → `MAGIC_LINK_INVALID`, US-10 AC-05) |
+| `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD) |
+
 ---
 
 ## 4. Decisiones derivadas
@@ -116,6 +150,9 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | 2 | **`family_id`** (no solo `user_id`) | US-03 AC-03 revoca la **familia** en reuso. Hoy `family_id = user_id` (una familia por usuario) pero la columna permite futuro multi-sesión (doc 01 → nº 161) sin migración de esquema |
 | 3 | **Logout = soft-revoke** (`status='revoked'`), nunca `DELETE` | Reconciliación de doc 00 → nº 42 («borrarlo de DB») con US-04 AC-02: borrar físicamente rompería la detección de reuso post-logout. El ítem 42 se interpreta como **borrado lógico** (ver tabla de correspondencia y nota del diagrama 4 en doc 02) |
 | 4 | **`google_sub UNIQUE`** | `findByGoogleSub` (diagrama 5) debe resolver un solo usuario; `UNIQUE` hace la colisión Google-Google imposible a nivel BD (análogo a US-01 AC-06 para email) |
+| 5 | **CHECK de identidad `users` ampliado** a `... OR email_verified = 1` | Un usuario solo-magic (creado por auto-cuenta en US-10 AC-02) no tiene `password_hash` ni `google_sub`; su email ya está verificado por posesión. Sin la ampliación, la CHECK original `(password_hash IS NOT NULL OR google_sub IS NOT NULL)` impediría persistir el alta implícita |
+| 6 | **`provider = 'magic'` en refresh_tokens y CHECK ampliado** | Las sesiones emitidas al consumir un magic link (US-10 AC-01) usan nuestros refresh (doc 00 → nº 47); `provider` informa su origen. La CHECK pasa de `('local','google')` a `('local','google','magic')` |
+| 7 | **`magic_links.status` único** (`pending`/`used`/`revoked`) sin flags | Mismo racional que la decisión 1 aplicado a los enlaces: un solo consumo (`used`) marca el fin de la vida útil; `revoked` queda reservado para revocación proactiva futura |
 
 ---
 
@@ -127,6 +164,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `sessions` | ❌ No hay tabla | La «sesión» persiste como refresh token activo; listar sesiones por dispositivo es iteración futura (doc 01 → nº 161) y ya está soportado estructuralmente por `family_id` |
 | `rate_limits` | ❌ No hay tabla | Rate limiting en memoria/aplicación (doc 00 → nº 41, 49), no persistente |
 | `google_refresh_tokens` | ❌ No hay tabla | Nunca se pide ni guarda el refresh de Google (doc 00 → nº 47); las sesiones Google usan nuestros `refresh_tokens` |
+| `email_verification_tokens` | ❌ No hay tabla (separada) | La verificación de email se resuelve con `magic_links` (US-09/10): el mismo enlace que autentica prueba la posesión del email (`email_verified = 1`). No hace falta una tabla independiente de confirmación de email |
 | Migraciones | 📁 Versionadas (Drizzle, doc 00 → nº 32) | El esquema evoluciona con migraciones SQL versionadas, no con sync automático |
 
 ---
@@ -135,5 +173,5 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 
 - Drizzle define el mismo esquema 1:1 (doc 00 → nº 30-33); `better-sqlite3` con `foreign_keys = ON` y WAL.
 - Tipos nativos: `TEXT` para UUID/ISO-8601/JTI y `INTEGER` para `email_verified` (SQLite no distingue más; los VOs del dominio (doc 02 → diagrama 6) validan la semántica en la frontera).
-- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`.
-- Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por token_hash — únicos ya indexados; por user_id y family_id en índices separados).
+- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`.
+- Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por refresh token_hash y por magic token_hash — únicos ya indexados; por user_id, family_id, magic email y magic status en índices separados).

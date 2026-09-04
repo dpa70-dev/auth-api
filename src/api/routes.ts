@@ -7,6 +7,8 @@ import type { Login } from '../app/login.js';
 import type { RefreshTokens } from '../app/refreshTokens.js';
 import type { Logout } from '../app/logout.js';
 import type { LoginGoogle } from '../app/loginGoogle.js';
+import type { RequestMagicLink } from '../app/requestMagicLink.js';
+import type { ConsumeMagicLink } from '../app/consumeMagicLink.js';
 import { requireAuth } from './authMiddleware.js';
 import { ApiError } from '../domain/apiError.js';
 import { ERROR_MESSAGES, ErrorCodes } from '../domain/errorCatalog.js';
@@ -18,6 +20,8 @@ export type UseCases = {
   login: Login;
   refreshTokens: RefreshTokens;
   logout: Logout;
+  requestMagicLink: RequestMagicLink;
+  consumeMagicLink: ConsumeMagicLink;
   /** null ⇔ GOOGLE_CLIENT_ID no configurado: la ruta existe pero responde 500 explícito. */
   loginGoogle: LoginGoogle | null;
 };
@@ -117,6 +121,33 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     }
   });
 
+  router.post('/auth/magic-link/request', authLimiter(deps.config), async (req, res, next) => {
+    try {
+      const body = magicLinkRequest.parse(req.body);
+      await useCases.requestMagicLink.execute({
+        email: body.email,
+        magicLinkTtlMinutes: deps.config.magicLink.ttlMinutes,
+        consumeBaseUrl: deps.config.magicLink.consumeBaseUrl,
+      });
+      res.status(200).json({ data: { ok: true } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/auth/magic-link/consume', authLimiter(deps.config), async (req, res, next) => {
+    try {
+      const body = magicLinkConsumeRequest.parse(req.body);
+      const result = await useCases.consumeMagicLink.execute({
+        token: body.token,
+        refreshTtlDays: deps.config.refreshTtlDays,
+      });
+      res.status(200).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get('/auth/me', requireAuth(deps.tokens), async (req, res, next) => {
     try {
       // requireAuth garantiza userId; el guard es defensa extra del contrato (nunca `!`).
@@ -152,6 +183,8 @@ const ALLOWED_METHODS: Record<string, string[]> = {
   '/auth/refresh': ['POST'],
   '/auth/logout': ['POST'],
   '/auth/google': ['POST'],
+  '/auth/magic-link/request': ['POST'],
+  '/auth/magic-link/consume': ['POST'],
   '/auth/me': ['GET'],
 };
 
@@ -175,4 +208,16 @@ const refreshRequest = z.object({
 const googleRequest = z.object({
   idToken: z.string({ message: 'idToken debe ser un string' }).min(1, { message: 'too_short' }),
   nonce: z.string({ message: 'nonce debe ser un string' }).min(1, { message: 'too_short' }).optional(),
+});
+
+const magicLinkRequest = z.object({
+  email: z
+    .string({ message: 'email debe ser un string' })
+    .trim()
+    .toLowerCase()
+    .pipe(z.email({ message: 'invalid_email' }).max(254, { message: 'email_too_long' })),
+});
+
+const magicLinkConsumeRequest = z.object({
+  token: z.string({ message: 'token debe ser un string' }).min(1, { message: 'too_short' }),
 });

@@ -1,7 +1,7 @@
 # 01 · Historias de Usuario y Criterios de Aceptación — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development (contrato OpenAPI en `03-openapi.yaml`). Estas historias fueron la entrada de la **especificación OpenAPI** (fase 2, resuelta) y lo serán de la **implementación** (fase 3, pendiente). Aún no se genera código.
-**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
+**Estado**: Fase 2 de Spec Driven Development (contrato OpenAPI en `03-openapi.yaml`) — historias completadas como entrada de la especificación (doc 03) y de la implementación (fase 3, resuelta: 44 tests e2e en verde, ver `test/e2e.test.ts` y `test/magicLink.test.ts`).
+**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), **acceso por magic link sin contraseña (US-09/10)**, colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
 
 ---
 
@@ -151,9 +151,43 @@
 
 ---
 
+## US-09 · Solicitar magic link (sign in sin contraseña)
+
+**Como** usuario, **quiero** recibir un enlace mágico por email, **para** iniciar sesión sin recordar una contraseña.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un email válido, cuando hago `POST /auth/magic-link/request` con `{ email }`, entonces obtengo `200 OK` con `{ data: { ok: true } }` y, si el email está registrado, se persiste un token y se envía un email con la URL de consumo `?token=<opaco>`.
+- **AC-02** — **Anti-enumeración**: la respuesta `200 { ok: true }` es **idéntica** exista o no el email, y se realiza la **misma cantidad de trabajo** (generar token, persistir hash, enviar email) en ambos casos — así el atacante no distingue por la respuesta ni por side-channel temporal si una cuenta está registrada.
+- **AC-03** — El token opaco es aleatorio (≥ 32 bytes) y el servidor persiste solo su **hash** SHA-256, nunca el token en claro (un leak de la DB no expone links utilizables).
+- **AC-04** — El enlace expira tras un TTL corto configurable (default 15 min, máx 60; env `MAGIC_LINK_TTL_MINUTES`).
+- **AC-05** — Email inválido/malformado → `422` con `details` indicando el campo.
+- **AC-06** — Endpoint bajo rate limit → `429` al exceder el umbral.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/magic-link/request` · body `{ email }` · respuestas 200/400/422/429.
+
+---
+
+## US-10 · Consumir magic link (login por enlace)
+
+**Como** usuario con un magic link en mi email, **quiero** abrirlo, **para** quedar autenticado con una sesión de tokens.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un token válido y vigente (`pending`, no vencido), cuando hago `POST /auth/magic-link/consume` con `{ token }`, entonces obtengo `200 OK` con `{ data: { accessToken, refreshToken, user } }` (misma forma que `/login` — el cliente no distingue el proveedor).
+- **AC-02** — **Auto-cuenta**: si el email del link no está registrado, se **crea** el usuario (`provider = 'magic'`, `email_verified = 1`) y se responde `200` con el par de tokens (primer consumo = alta implícita).
+- **AC-03** — Si el email ya está registrado (local o Google), se marca `email_verified = 1` y se emite sesión sobre la cuenta existente (probar posesión del email no crea una identidad duplicada).
+- **AC-04** — **Un solo uso**: el token se marca `used` al consumirse; presentarlo de nuevo → `401` (`MAGIC_LINK_INVALID`).
+- **AC-05** — Token inexistente, revocado o vencido → `401` `MAGIC_LINK_INVALID`, respuesta idéntica en forma para todos los casos (anti-enumeración).
+- **AC-06** — El access token emitido funciona en los endpoints protegidos (`/auth/me`), igual que cualquier otra sesión.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/magic-link/consume` · body `{ token }` · respuestas 200/400/401/422/429.
+
+---
+
 ## Fuera de alcance (para fases futuras)
 
-- Verificación de email (confirmación por enlace) — emails locales quedan `email_verified = 0` sin flujo de confirmación (los de Google sí vienen verificados).
+- ~~Verificación de email~~ — **resuelto con magic link (US-09/10)**: emails locales se verifican al consumir un enlace (`email_verified = 1`); sigue aplicando que los de Google vienen verificados por OIDC.
 - **Vincular cuentas locales con cuentas Google (account linking)** — política actual: sin auto-linking (ver doc `00-consideraciones-tecnicas.md` → nº 46).
 - Recuperación / reset de contraseña.
 - 2FA / MFA.
@@ -169,4 +203,5 @@
 1. *(Resuelto el 27-ago-2026)*: **especificación OpenAPI 3.1** en `docs/03-openapi.yaml` (paths, schemas, security schemes, ejemplos). Validada con `@redocly/cli` (0 errores) y parseada con `openapi-typescript`.
 2. *(Resuelto el 27-ago-2026)*: argon2id · jose + middleware propio · estructura por capas · Drizzle · **Google OIDC (GIS token flow + jose; modelo `users` nullable)**. No quedan opciones abiertas → la especificación partió directo de estas historias.
 3. *(Resuelto el 29-ago-2026)*: **modelo de datos** en `docs/04-modelo-de-datos.md` (ERD + DDL `users`/`refresh_tokens`, trazabilidad columna→fuente) y **auditoría de fidelidad** de los flujos en `docs/02-flujos-registro-autenticacion.md` (logout = soft-revoke para satisfacer AC-02, ramas 429 en /refresh y /google, notas Google-only y token opaco).
-4. Recién después: implementación contra el contrato (SDD), con `openapi-typescript` (tipos derivados del contrato) y contract tests.
+4. *(Resuelto el 29-ago-2026)*: **implementación contra el contrato (SDD)** con `openapi-typescript` (tipos derivados del contrato) y contract tests.
+5. *(Resuelto el 3-sep-2026)*: **magic link (US-09/10)** — contrato (doc 03), modelo `magic_links` (doc 04), diagrama 6 (doc 02), consideraciones nº 55 (doc 00) e implementación completa con 10 tests nuevos en `test/magicLink.test.ts` (44 total).

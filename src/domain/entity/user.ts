@@ -49,8 +49,8 @@ export const newUserSchema = z
     googleSub: googleSubSchema.nullable(),
     emailVerified: z.boolean(),
   })
-  .refine((u) => u.passwordHash !== null || u.googleSub !== null, {
-    message: 'al menos una identidad (password_hash o google_sub)',
+  .refine((u) => u.passwordHash !== null || u.googleSub !== null || u.emailVerified === true, {
+    message: 'al menos una identidad (password_hash, google_sub o email verificado)',
   });
 
 /** `users` persistidos malformados no deben entrar al dominio: parsear antes de usar. */

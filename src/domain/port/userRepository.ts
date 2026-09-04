@@ -50,4 +50,6 @@ export interface UserRepository {
   revokeRefreshToken(tokenHash: string): Promise<void>;
   /** Revoca TODA la familia del usuario (US-03 AC-03, doc 02 → diagrama 3). */
   revokeFamily(userId: UserId): Promise<void>;
+  /** SET email_verified = true (posesión de email probada vía magic link, doc 04 → decisión 5). */
+  markEmailVerified(email: Email): Promise<void>;
 }

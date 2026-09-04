@@ -146,6 +146,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/magic-link/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Solicitar magic link (sign in sin contraseña)
+         * @description Genera y envía un enlace de acceso por email (US-09). La respuesta `200 { data: { ok: true } }`
+         *     es **idéntica** exista o no el email, y se realiza la misma cantidad de trabajo (generar token,
+         *     persistir su hash, enviar email) en ambos casos — anti-enumeración estricta: ni la respuesta ni
+         *     un side-channel temporal revelan si la cuenta está registrada. El servidor persiste solo el
+         *     **hash SHA-256** del token opaco (≥ 32 bytes aleatorios), nunca el token en claro. El enlace
+         *     expira en un TTL corto configurable (`MAGIC_LINK_TTL_MINUTES`, default 15, máx 60). La auto-cuenta
+         *     se resuelve en el consume (US-10 AC-02): un link enviado a un email no registrado crea la cuenta.
+         */
+        post: operations["requestMagicLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/magic-link/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consumir magic link (login por enlace)
+         * @description Intercambia un token de magic link válido y vigente por el par de tokens (US-10). La respuesta
+         *     tiene la misma forma que `/login` (el cliente no distingue el proveedor). **Auto-cuenta**: si el
+         *     email del link no está registrado, se crea el usuario (`provider = 'magic'`, `email_verified = 1`)
+         *     y se responde 200. Si ya está registrado (local/Google), se marca `email_verified = 1` y se emite
+         *     sesión sobre la cuenta existente. **Un solo uso**: el token se marca `used` al consumirse. Token
+         *     inexistente, revocado o vencido → 401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+         */
+        post: operations["consumeMagicLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -182,6 +233,27 @@ export interface components {
              * @example vZ3mX9qK2rT8wY5bN1cL7pD0sF4hJ6a
              */
             nonce?: string;
+        };
+        MagicLinkRequest: {
+            email: components["schemas"]["Email"];
+        };
+        MagicLinkRequestResponse: {
+            data: {
+                /**
+                 * @description Siempre true — respuesta idéntica exista o no el email (anti-enumeración, US-09 AC-02).
+                 * @example true
+                 */
+                ok: boolean;
+            };
+        };
+        /**
+         * @description Token opaco aleatorio (≥ 32 bytes, base64url) que viaja en la URL de consumo `?token=<opaco>`.
+         *     El servidor persiste solo su hash SHA-256. Un solo uso; TTL corto configurable (US-09 AC-03/AC-04).
+         * @example ejOpc0aQnFgW4s9XyZ2bCdEfGhIjKlMnOpQrStUvWx
+         */
+        MagicLinkToken: string;
+        MagicLinkConsumeRequest: {
+            token: components["schemas"]["MagicLinkToken"];
         };
         /**
          * @description JWT HS256 del proyecto. Claims: sub (users.id), iss, aud, exp, iat, nbf y jti.
@@ -243,12 +315,13 @@ export interface components {
                 /**
                  * @description Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                  *     documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED y RATE_LIMITED; UNAUTHORIZED y
-                 *     MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren
-                 *     el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
+                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID y RATE_LIMITED;
+                 *     UNAUTHORIZED y MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y
+                 *     METHOD_NOT_ALLOWED cubren el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR
+                 *     para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "RATE_LIMITED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "RATE_LIMITED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */
@@ -522,6 +595,71 @@ export interface operations {
                 };
             };
             401: components["responses"]["UnauthorizedGeneric"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    requestMagicLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Enlace enviado (o no) — respuesta idéntica siempre (anti-enumeración). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicLinkRequestResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    consumeMagicLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicLinkConsumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada; mismo contrato que /login / /auth/google. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Token inexistente, revocado o vencido — forma idéntica (anti-enumeración). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };

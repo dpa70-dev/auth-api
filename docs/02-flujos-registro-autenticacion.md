@@ -1,7 +1,7 @@
 # 02 · Flujos de Registro y Autenticación — Representación Gráfica
 
-**Estado**: Fase 2 de Spec Driven Development — representación gráfica de `01-historias-de-usuario.md`, auditada contra el contrato OpenAPI (`03-openapi.yaml`) y el modelo de datos (`04-modelo-de-datos.md`). **Implementada y verificada en la fase 3 (29-ago-2026)**: cada flujo de este documento tiene su test e2e en `test/e2e.test.ts` (US-01..08, 23 tests en verde).
-**Fuente**: historias US-01 a US-08 y consideraciones `00-consideraciones-tecnicas.md` (ítems 16-24 errores, 35 hashing, 36-38 tokens, 41-42 hardening/logout, 43-47 Google OIDC).
+**Estado**: Fase 2 de Spec Driven Development — representación gráfica de `01-historias-de-usuario.md`, auditada contra el contrato OpenAPI (`03-openapi.yaml`) y el modelo de datos (`04-modelo-de-datos.md`). **Implementada y verificada en la fase 3 (29-ago-2026 → 3-sep-2026)**: cada flujo de este documento tiene su test e2e en `test/e2e.test.ts` y `test/magicLink.test.ts` (US-01..10, 44 tests en verde).
+**Fuente**: historias US-01 a US-10 y consideraciones `00-consideraciones-tecnicas.md` (ítems 16-24 errores, 35 hashing, 36-38 tokens, 41-42 hardening/logout, 43-47 Google OIDC, 50-52 magic link).
 **Cómo leer**: cada diagrama es un proceso completo con sus caminos de éxito y error; las respuestas de error siguen siempre el envelope `{ error: { code, message, details? } }` con `requestId` (doc 00 → ítems 20-21); las de éxito, `{ data: ... }`.
 
 ## 0. Leyenda de participantes
@@ -14,6 +14,8 @@
 | `T` | Infraestructura — `TokenService` (emisión/verificación jose) |
 | `H` | Infraestructura — `PasswordHasher` (argon2id) |
 | `R` | Infraestructura — `UserRepository` (acceso a datos) |
+| `M` | Infraestructura — `MagicLinkRepository` (acceso a datos de `magic_links`) |
+| `E` | Infraestructura — `EmailSender` (envío de magic links) |
 | `DB` | SQLite (better-sqlite3 + Drizzle) |
 | `GIS` | Google Identity Services — "Sign in with Google" (lado cliente) |
 | `JWKS` | JSON Web Key Set de Google (`accounts.google.com/.well-known/jwks.json`) — claves públicas de firma |
@@ -21,8 +23,9 @@
 Reglas transversales que aplican a todos los diagramas (doc 00 → ítems 16-24, 41, 48-49):
 
 - `400` = JSON/header malformado · `401` = no autenticado (mensaje genérico) · `409` = conflicto de identidad · `422` = validación zod con `details` por campo · `429` = rate limit · `500` = genérico con `requestId`.
-- Rate limiting en `/register`, `/login`, `/refresh` y `/google` (más agresivo que el global); `429` con `Retry-After`.
+- Rate limiting en `/register`, `/login`, `/refresh`, `/google` y `/auth/magic-link/*` (más agresivo que el global); `429` con `Retry-After`.
 - El access token dura 5-15 min (HS256, algoritmo fijado); el refresh 7-30 días, guardado **hasheado** (SHA-256) con su `jti` y rotado en cada uso.
+- El magic link es un token **opaco** (≥ 32 bytes aleatorios) persistido solo como **hash** SHA-256, con TTL corto y un solo uso.
 
 ---
 
@@ -268,7 +271,71 @@ Notas:
 
 ---
 
-## 6. Arquitectura por capas y sus puertos
+## 6. Magic link (solicitud + consumo) — US-09/US-10
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant P as Presentación
+    participant A as Aplicación · RequestMagicLink / ConsumeMagicLink
+    participant M as MagicLinkRepository
+    participant R as UserRepository
+    participant T as TokenService
+    participant E as EmailSender
+    participant DB as SQLite
+
+    Note over C,A: Solicitud (US-09)
+    C->>P: POST /api/v1/auth/magic-link/request { email }
+    P->>A: RequestMagicLink(emailNormalizado, ttlMinutes, consumeBaseUrl)
+
+    alt Payload inválido
+        P-->>C: 422 VALIDATION_ERROR (email malformado)
+    else Rate limit excedido
+        P-->>C: 429 RATE_LIMITED (Retry-After: n)
+    else Válido — siembre se genera/persiste/envía (anti-enumeración y auto-cuenta)
+        A->>A: rawToken = randomBytes(32).base64url
+        A->>A: tokenHash = sha256(rawToken) · expiresAt = now + ttl
+        A->>M: insert({ tokenHash, email, status: 'pending', expiresAt })
+        M->>DB: INSERT INTO magic_links (...)
+        A->>E: sendMagicLink({ to: email, url: consumeBaseUrl + '?token=' + rawToken })
+        A-->>C: 200 { data: { ok: true } } — idéntico exista o no el email
+    end
+
+    Note over C,A: Consumo (US-10)
+    C->>P: POST /api/v1/auth/magic-link/consume { token }
+    P->>A: ConsumeMagicLink(token)
+    A->>A: tokenHash = sha256(token)
+    A->>M: findByTokenHash(tokenHash)
+    M->>DB: SELECT ... FROM magic_links WHERE token_hash = ?
+    DB-->>M: fila | null
+
+    alt Token inexistente / no pending / vencido → 401 idéntico (anti-enumeración)
+        A-->>C: 401 MAGIC_LINK_INVALID
+    else Token válido y vigente (pending)
+        A->>R: findByEmail(email)
+        alt Email NO está registrado (AUTO-CUENTA, US-10 AC-02)
+            Note over A,R: Alta implícita: provider 'magic', email_verified=1, sin password_hash ni google_sub (CHECK = email_verified permite la fila)
+            A->>R: createUser({ id: uuid, email, passwordHash: null, googleSub: null, emailVerified: true })
+        else Email ya registrado
+            A->>R: markEmailVerified(email) — prueba posesión del email (US-10 AC-03)
+        end
+        A->>M: markUsed(tokenHash) — un solo uso
+        A->>T: emitirPar(user.id) — provider 'magic'
+        T-->>A: accessToken + refreshToken
+        A-->>C: 200 { data: { accessToken, refreshToken, user } } — mismo contrato que /login
+    end
+```
+
+Notas:
+
+- **Anti-enumeración estricta (US-09 AC-02)**: la respuesta `200 { ok: true }` y el trabajo realizado (token + hash + insert + envío) son idénticos exista o no el email — sin side-channel temporal. El lado negativo (no enviar si no existe) fue **descartado**: es incompatible con la auto-cuenta (US-10 AC-02) porque un usuario nuevo jamás recibiría el link.
+- **Hash, no claro (US-09 AC-03)**: la BD guarda solo `sha256(rawToken)`; un leak de `magic_links` no expone enlaces utilizables.
+- **Un solo uso (US-10 AC-04)**: `markUsed` se ejecuta sobre el hash; reusar el token → 401 `MAGIC_LINK_INVALID` idéntico a inexistente/vencido (anti-enumeración).
+- El email verificado del consume (auto-cuenta o `markEmailVerified`) habilita el CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5).
+
+---
+
+## 7. Arquitectura por capas y sus puertos
 
 ```mermaid
 flowchart LR
@@ -279,15 +346,17 @@ flowchart LR
     end
 
     subgraph APP[Aplicación]
-        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle]
+        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink]
     end
 
     subgraph DOM[Dominio]
-        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified]
+        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus]
         VA[«puerto» PasswordHasher]
         VB[«puerto» TokenService]
         VC[«puerto» UserRepository]
         VD[«puerto» Logger]
+        VE[«puerto» MagicLinkRepository]
+        VF[«puerto» EmailSender]
     end
 
     subgraph INF[Infraestructura]
@@ -295,6 +364,8 @@ flowchart LR
         IB[JoseTokenService]
         IC[DrizzleUserRepository]
         ID[PinoLogger]
+        IE[DrizzleMagicLinkRepository]
+        IF[ConsoleEmailSender]
     end
 
     DB[(SQLite)]
@@ -306,13 +377,18 @@ flowchart LR
     A --> VB
     A --> VC
     A --> VD
+    A --> VE
+    A --> VF
 
     VA -.implementado por.-> IA
     VB -.implementado por.-> IB
     VC -.implementado por.-> IC
     VD -.implementado por.-> ID
+    VE -.implementado por.-> IE
+    VF -.implementado por.-> IF
 
     IC --> DB
+    IE --> DB
     IB -->|jose · verify| JWKS
 ```
 
@@ -321,6 +397,7 @@ Notas:
 - Dependencia estricta hacia adentro: `presentation → application → domain`; el dominio jamás importa Express, SQLite ni pino (doc 00 → ítem 25).
 - Los puertos se definen en domain/application y los adapters se inyectan por constructor (DIP): cambiar argon2 por scrypt o SQLite por Postgres implica **añadir un adaptador**, nunca tocar el dominio (doc 00 → ítem 26, OCP).
 - Los VOs brandeados con Zod (sección 6.1) son el vocabulario del dominio: el input sucio se parsea una sola vez en la frontera y circula como tipo ya válido (*parse, don't validate*).
+- El `EmailSender` es un puerto con una impl de consola (`ConsoleEmailSender`, loguea `to` + `url` en desarrollo); en producción se sustituye por un adapter SMTP/transaccional sin tocar el caso de uso.
 
 ---
 
@@ -333,4 +410,5 @@ Notas:
 | 3. Refresco de tokens | US-03 | 38, 40 |
 | 4. Logout | US-04 | 38, 42 |
 | 5. Login con Google | US-07, US-08 (AC-02) | 43-47 |
-| 6. Capas y puertos | (transversal) | 25-28, 6.1 |
+| 6. Magic link | US-09, US-10 | 38, 41, 55 |
+| 7. Capas y puertos | (transversal) | 25-28, 6.1 |

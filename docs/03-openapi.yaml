@@ -357,6 +357,106 @@ paths:
           $ref: '#/components/responses/UnauthorizedGeneric'
         '500':
           $ref: '#/components/responses/InternalError'
+  /auth/magic-link/request:
+    post:
+      tags: [Auth]
+      operationId: requestMagicLink
+      summary: Solicitar magic link (sign in sin contraseña)
+      description: |
+        Genera y envía un enlace de acceso por email (US-09). La respuesta `200 { data: { ok: true } }`
+        es **idéntica** exista o no el email, y se realiza la misma cantidad de trabajo (generar token,
+        persistir su hash, enviar email) en ambos casos — anti-enumeración estricta: ni la respuesta ni
+        un side-channel temporal revelan si la cuenta está registrada. El servidor persiste solo el
+        **hash SHA-256** del token opaco (≥ 32 bytes aleatorios), nunca el token en claro. El enlace
+        expira en un TTL corto configurable (`MAGIC_LINK_TTL_MINUTES`, default 15, máx 60). La auto-cuenta
+        se resuelve en el consume (US-10 AC-02): un link enviado a un email no registrado crea la cuenta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MagicLinkRequest'
+            examples:
+              valido:
+                summary: Payload válido
+                value:
+                  email: ana@example.com
+      responses:
+        '200':
+          description: Enlace enviado (o no) — respuesta idéntica siempre (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MagicLinkRequestResponse'
+              examples:
+                ok:
+                  summary: Solicitud aceptada (US-09 AC-01/AC-02)
+                  value:
+                    data:
+                      ok: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/magic-link/consume:
+    post:
+      tags: [Auth]
+      operationId: consumeMagicLink
+      summary: Consumir magic link (login por enlace)
+      description: |
+        Intercambia un token de magic link válido y vigente por el par de tokens (US-10). La respuesta
+        tiene la misma forma que `/login` (el cliente no distingue el proveedor). **Auto-cuenta**: si el
+        email del link no está registrado, se crea el usuario (`provider = 'magic'`, `email_verified = 1`)
+        y se responde 200. Si ya está registrado (local/Google), se marca `email_verified = 1` y se emite
+        sesión sobre la cuenta existente. **Un solo uso**: el token se marca `used` al consumirse. Token
+        inexistente, revocado o vencido → 401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MagicLinkConsumeRequest'
+            examples:
+              valido:
+                summary: Payload válido
+                value:
+                  token: ejOpc0aQnFgW4s9XyZ2bCdEfGhIjKlMnOpQrStUvWx
+      responses:
+        '200':
+          description: Sesión iniciada; mismo contrato que /login / /auth/google.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Acceso por enlace (US-10 AC-01/AC-02/AC-03)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTA3MCwiZXhwIjoxNzg3ODcwNDcwLCJuYmYiOjE3ODc4NjkwNzAsImp0aSI6ImEwMWI1Y2NjIn0.ejemplo_firma
+                      refreshToken: v4.local.ejemplo-opaco-solo-server
+                      user:
+                        id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                        email: ana@example.com
+                        createdAt: '2026-08-27T10:15:30.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Token inexistente, revocado o vencido — forma idéntica (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -410,6 +510,40 @@ components:
             (si no → 401 UNAUTHORIZED); si el ID token no lo incluye, se ignora. Opcional en el schema por el
             flujo condicional de Google (no siempre emite nonce), no porque sea prescindible cuando sí existe.
           example: vZ3mX9qK2rT8wY5bN1cL7pD0sF4hJ6a
+    MagicLinkRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+    MagicLinkRequestResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [ok]
+          additionalProperties: false
+          properties:
+            ok:
+              type: boolean
+              description: Siempre true — respuesta idéntica exista o no el email (anti-enumeración, US-09 AC-02).
+              example: true
+    MagicLinkToken:
+      type: string
+      description: |
+        Token opaco aleatorio (≥ 32 bytes, base64url) que viaja en la URL de consumo `?token=<opaco>`.
+        El servidor persiste solo su hash SHA-256. Un solo uso; TTL corto configurable (US-09 AC-03/AC-04).
+      example: ejOpc0aQnFgW4s9XyZ2bCdEfGhIjKlMnOpQrStUvWx
+    MagicLinkConsumeRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token:
+          $ref: '#/components/schemas/MagicLinkToken'
     AccessToken:
       type: string
       description: |
@@ -504,15 +638,17 @@ components:
               description: |
                 Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                 documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED y RATE_LIMITED; UNAUTHORIZED y
-                MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren
-                el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
+                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID y RATE_LIMITED;
+                UNAUTHORIZED y MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y
+                METHOD_NOT_ALLOWED cubren el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR
+                para 500.
               enum:
                 - VALIDATION_ERROR
                 - INVALID_CREDENTIALS
                 - EMAIL_ALREADY_EXISTS
                 - ACCOUNT_EXISTS_WITH_GOOGLE
                 - EMAIL_NOT_VERIFIED
+                - MAGIC_LINK_INVALID
                 - RATE_LIMITED
                 - UNAUTHORIZED
                 - MALFORMED_REQUEST

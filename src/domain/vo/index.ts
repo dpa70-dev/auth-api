@@ -10,6 +10,7 @@
 export * from './email.js';
 export * from './googleSub.js';
 export * from './jti.js';
+export * from './magicLinkStatus.js';
 export * from './passwordHash.js';
 export * from './plainPassword.js';
 export * from './provider.js';

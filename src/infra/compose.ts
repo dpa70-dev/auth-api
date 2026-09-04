@@ -3,10 +3,12 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
-import type { GoogleIdTokenVerifier, Logger } from '../domain/port/index.js';
+import type { EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository } from '../domain/port/index.js';
 import { Argon2PasswordHasher } from './argon2PasswordHasher.js';
 import { JoseTokenService } from './joseTokenService.js';
 import { DrizzleUserRepository } from './drizzleUserRepository.js';
+import { DrizzleMagicLinkRepository } from './drizzleMagicLinkRepository.js';
+import { ConsoleEmailSender } from './consoleEmailSender.js';
 import { GoogleIdTokenVerifierJose } from './googleJwtVerifier.js';
 import { PinoLogger } from './pinoLogger.js';
 
@@ -17,6 +19,8 @@ export type ComposeOverrides = {
   db?: Database.Database;
   google?: GoogleIdTokenVerifier | null;
   logger?: Logger;
+  magicLinks?: MagicLinkRepository;
+  sender?: EmailSender;
 };
 
 export type InfraPorts = {
@@ -24,6 +28,8 @@ export type InfraPorts = {
   hasher: PasswordHasher;
   tokens: TokenIssuer;
   google: GoogleIdTokenVerifier | null;
+  magicLinks: MagicLinkRepository;
+  sender: EmailSender;
   logger: Logger;
   close: () => void;
 };
@@ -45,11 +51,13 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
   const hasher = new Argon2PasswordHasher();
   const tokens = new JoseTokenService(new TextEncoder().encode(cfg.jwtSecret), cfg.accessTtlMinutes);
   const users = new DrizzleUserRepository(db);
+  const magicLinks = overrides.magicLinks ?? new DrizzleMagicLinkRepository(db);
+  const sender = overrides.sender ?? new ConsoleEmailSender(logger);
   const google = overrides.google !== undefined
     ? overrides.google
     : cfg.google.clientId !== undefined
       ? new GoogleIdTokenVerifierJose(cfg.google.clientId, cfg.google.issuer, cfg.google.jwksUrl)
       : null;
 
-  return { users, hasher, tokens, google, logger, close: () => sqlite.close() };
+  return { users, hasher, tokens, google, magicLinks, sender, logger, close: () => sqlite.close() };
 };

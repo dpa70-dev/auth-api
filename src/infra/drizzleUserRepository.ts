@@ -111,6 +111,10 @@ export class DrizzleUserRepository implements UserRepository {
     // familia = user_id (decisión 2, doc 04): revocar todos los refresh del usuario.
     this.db.update(refreshTokens).set({ status: 'revoked' }).where(eq(refreshTokens.familyId, userId)).run();
   }
+
+  async markEmailVerified(email: Email): Promise<void> {
+    this.db.update(users).set({ emailVerified: true }).where(eq(users.email, email)).run();
+  }
 }
 
 type RefreshRecord = NonNullable<Awaited<ReturnType<UserRepository['findByRefreshTokenHash']>>>;

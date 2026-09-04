@@ -9,3 +9,7 @@ docs/*.html
 .codegraph
 # artefactos internos del orquestador de agentes (sesiones/continuación), no es fuente
 .omo/run-continuation/
+# diffs / parches generados
+patches/
+# exports de sesión (transcript .md), no son fuente
+exports/

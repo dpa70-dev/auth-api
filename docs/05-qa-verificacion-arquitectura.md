@@ -164,3 +164,25 @@ Consolidación de la configuración de entorno en un único `src/config.ts`, eli
 **Los consumers no cambiaron**: `NodeEnv` (pinoLogger) y `Config` (compose, routes, index) seguían importando de `./config.js`/`../config.js`; al mantener el nombre de archivo, los imports quedan intactos y tipan igual (tipos idénticos).
 
 **Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓ · runtime (tsx, sin env de Google): `issuer: ["https://accounts.google.com"]` · `nodeEnv: "development"` · rate-limit defaults intactos · grep: 0 referencias a `config2`.
+
+## 15. Tema tratado — Magic link: acceso sin contraseña (3-sep-2026)
+
+Implementación completa del flujo de magic link (US-09/US-10) siguiendo el plan aprobado en `.omo/plans/magic-link.md`.
+
+**Decisiones del plan (ratificadas por el usuario)**:
+- **Auto-cuenta**: el primer link de un email no registrado crea la cuenta al consumirse (`provider = 'magic'`, `email_verified = 1`).
+- **Token opaco 32 bytes** + hash SHA-256 en `magic_links` (patrón ya usado en `refresh_tokens`).
+- **`provider = 'magic'`** ampliando el enum `['local','google'] → ['local','google','magic']`.
+- **Puerto `EmailSender`** con adapter de consola (dev); smtp en prod sin tocar el caso de uso.
+- **`emailVerified = true`** al consumir un link válido.
+
+**Deviación del plan detectada en implementación** (corregida y nota conceptual): el plan original recomendaba "no generar/persistir/enviar nada si el email no existe" (anti-enumeración total, opción A). Esto es **incompatible con la auto-cuenta**: un usuario nuevo jamás recibiría el link. Se adoptó la **opción B** — `request` genera/persiste/envía **siempre** (trabajo idéntico en ambos casos) con respuesta `200 { ok: true }` idéntica. La anti-enumeración se conserva (misma respuesta + mismo trabajo + sin side-channel temporal) y la auto-cuenta queda habilitada.
+
+**Verificación de arquitectura** (nuevos puertos/adapters del magic link):
+- `MagicLinkRepository` (puerto, domain/port) → `DrizzleMagicLinkRepository` (infra), inyectado por constructor en `RequestMagicLink`/`ConsumeMagicLink` — DIP respetado (doc 00 → ítem 26).
+- `EmailSender` (puerto) → `ConsoleEmailSender` (infra): adapter intercambiable sin tocar el use case (doc 00 → ítem 55).
+- `markEmailVerified` añadido al puerto `UserRepository` y su impl Drizzle — transición de estado `email_verified = 1` (posesión de email probada).
+- CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5) y CHECK de `provider` ampliado a `magic` — el alta implícita de auto-cuenta es persistible.
+- `ConsumeMagicLink` reutiliza `TokenIssuer.issueSession` (misma emisión/rotación que `/login` y `/google`); las sesiones magic usan nuestros refresh (doc 00 → ítem 47).
+
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓.
