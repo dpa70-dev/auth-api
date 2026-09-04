@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import type { Logger, MagicLinkRepository, TokenIssuer, UserRepository } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import { providerSchema, userIdSchema, type Email, type UserId } from '../domain/vo/index.js';
-import { issueSession } from './issueSession.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import type { Logger, MagicLinkRepository, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import { providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { issueSession } from '../helpers/issueSession.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type ConsumeMagicLinkCommand = {
   token: string;
@@ -18,7 +19,7 @@ export type ConsumeMagicLinkResult = {
   user: { id: UserId; email: Email; createdAt: string };
 };
 
-export class ConsumeMagicLink {
+export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, ConsumeMagicLinkResult> {
   constructor(
     private readonly users: UserRepository,
     private readonly magicLinks: MagicLinkRepository,

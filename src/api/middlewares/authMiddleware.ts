@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import type { TokenIssuer } from '../domain/port/index.js';
-import { userIdSchema, type UserId } from '../domain/vo/index.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import type { TokenIssuer } from '../../domain/port/index.js';
+import { userIdSchema, type UserId } from '../../domain/vo/index.js';
 
 declare global {
   namespace Express {

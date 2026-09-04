@@ -37,7 +37,7 @@ export type InfraPorts = {
 /**
  * Capa infraestructura: instancia las implementaciones reales de los puertos a partir de la
  * configuración, respetando los sobre-rides (db, google, logger) para tests. No construye los
- * casos de uso (eso es la capa application, app/useCases.ts) ni ensambla la app (eso es index.ts).
+ * casos de uso (eso es la capa application, app/buildUseCases.ts) ni ensambla la app (eso es index.ts).
  */
 export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = appConfig): InfraPorts => {
   const rawLogger = new PinoLogger(cfg.nodeEnv);

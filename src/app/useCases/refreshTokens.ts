@@ -1,9 +1,10 @@
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import type { Logger, TokenIssuer, UserRepository } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import { isRefreshExpired } from '../domain/refreshExpiry.js';
-import { issueSession } from './issueSession.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import type { Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import { isRefreshExpired } from '../../domain/refreshExpiry.js';
+import { issueSession } from '../helpers/issueSession.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type RefreshTokensCommand = {
   refreshToken: string;
@@ -16,7 +17,7 @@ export type RefreshTokensResult = {
   refreshToken: string;
 };
 
-export class RefreshTokens {
+export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshTokensResult> {
   constructor(
     private readonly users: UserRepository,
     private readonly tokens: TokenIssuer,

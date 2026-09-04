@@ -7,12 +7,12 @@ import { pinoHttp } from 'pino-http';
 import { config } from './config.js';
 import { LOG_EVENTS } from './domain/port/index.js';
 import { composeInfra, type ComposeOverrides } from './infra/compose.js';
-import { buildUseCases } from './app/useCases.js';
+import { buildUseCases } from './app/buildUseCases.js';
 import { PinoLogger, requestContext } from './infra/pinoLogger.js';
 
 import { apiRouter } from './api/routes.js';
-import { httpLoggerConfig, requestIdMiddleware } from './api/middleware.js';
-import { finalErrorHandler, notFound } from './api/errorMiddleware.js';
+import { httpLoggerConfig, requestIdMiddleware } from './api/middlewares/middleware.js';
+import { finalErrorHandler, notFound } from './api/middlewares/errorMiddleware.js';
 
 // Permite inyectar dependencias externas (útil en tests). Delega en composeInfra infra/compose.ts.
 export type AppDeps = ComposeOverrides;
@@ -26,7 +26,7 @@ export const buildApp = (overrides: AppDeps = {}) => {
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigins }));
 
-  // Logging por request (pino-http) y propagación del requestId — defs en api/middleware.ts.
+  // Logging por request (pino-http) y propagación del requestId — defs en api/middlewares/middleware.ts.
   app.use(pinoHttp(httpLoggerConfig(new PinoLogger(config.nodeEnv).raw)));
   app.use(requestIdMiddleware(requestContext));
 

@@ -1,9 +1,10 @@
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import type { Logger, PasswordHasher, TokenIssuer, UserRepository } from '../domain/port/index.js';
-import { emailSchema, plainPasswordSchema, providerSchema, type Email, type UserId } from '../domain/vo/index.js';
-import { LOG_EVENTS, LOG_REASONS } from '../domain/port/index.js';
-import { issueSession } from './issueSession.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import type { Logger, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import { emailSchema, plainPasswordSchema, providerSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { LOG_EVENTS, LOG_REASONS } from '../../domain/port/index.js';
+import { issueSession } from '../helpers/issueSession.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type LoginCommand = {
   email: string;
@@ -18,7 +19,7 @@ export type LoginResult = {
   user: { id: UserId; email: Email; createdAt: string };
 };
 
-export class Login {
+export class Login implements UseCase<LoginCommand, LoginResult> {
   constructor(
     private readonly users: UserRepository,
     private readonly hasher: PasswordHasher,

@@ -1,10 +1,11 @@
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import { UniqueConstraintViolation } from '../domain/uniqueConstraintViolation.js';
-import type { Logger, PasswordHasher, TokenIssuer, UserRecord, UserRepository } from '../domain/port/index.js';
-import { emailSchema, plainPasswordSchema, providerSchema, userIdSchema, type Email, type UserId } from '../domain/vo/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import { issueSession } from './issueSession.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
+import type { Logger, PasswordHasher, TokenIssuer, UserRecord, UserRepository } from '../../domain/port/index.js';
+import { emailSchema, plainPasswordSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import { issueSession } from '../helpers/issueSession.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type RegisterUserCommand = {
   email: string;
@@ -19,7 +20,7 @@ export type RegisterUserResult = {
   user: { id: UserId; email: Email; createdAt: string };
 };
 
-export class RegisterUser {
+export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserResult> {
   constructor(
     private readonly users: UserRepository,
     private readonly hasher: PasswordHasher,

@@ -1,10 +1,11 @@
-import { ApiError } from '../domain/apiError.js';
-import { ErrorCodes } from '../domain/errorCatalog.js';
-import { UniqueConstraintViolation } from '../domain/uniqueConstraintViolation.js';
-import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../domain/port/index.js';
-import { userIdSchema, providerSchema, type Email, type Provider, type UserId } from '../domain/vo/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import { issueSession } from './issueSession.js';
+import { ApiError } from '../../domain/apiError.js';
+import { ErrorCodes } from '../../domain/errorCatalog.js';
+import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
+import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import { userIdSchema, providerSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import { issueSession } from '../helpers/issueSession.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type LoginGoogleCommand = {
   idToken: string;
@@ -20,7 +21,7 @@ export type LoginGoogleResult = {
   user: { id: UserId; email: Email; createdAt: string };
 };
 
-export class LoginGoogle {
+export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResult> {
   constructor(
     private readonly users: UserRepository,
     private readonly verifier: GoogleIdTokenVerifier,

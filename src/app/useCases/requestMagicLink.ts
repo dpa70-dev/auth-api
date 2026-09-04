@@ -4,9 +4,10 @@ import type {
   Logger,
   MagicLinkRepository,
   TokenIssuer,
-} from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import { emailSchema } from '../domain/vo/index.js';
+} from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import { emailSchema } from '../../domain/vo/index.js';
+import type { UseCase } from '../interfaces/useCase.js';
 
 export type RequestMagicLinkCommand = {
   email: string;
@@ -27,7 +28,7 @@ export type RequestMagicLinkResult = { ok: true };
  * La auto-cuenta (US-10) se resuelve en el consume: un enlace enviado a un email aún no
  * registrado crea la cuenta al validarse.
  */
-export class RequestMagicLink {
+export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, RequestMagicLinkResult> {
   constructor(
     private readonly magicLinks: MagicLinkRepository,
     private readonly tokens: TokenIssuer,

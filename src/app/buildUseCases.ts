@@ -8,16 +8,18 @@ import type {
   UserRepository,
 } from '../domain/port/index.js';
 
-import { RegisterUser } from './registerUser.js';
-import { Login } from './login.js';
-import { RefreshTokens } from './refreshTokens.js';
-import { Logout } from './logout.js';
-import { LoginGoogle } from './loginGoogle.js';
-import { RequestMagicLink } from './requestMagicLink.js';
-import { ConsumeMagicLink } from './consumeMagicLink.js';
+import {
+  RegisterUser,
+  Login,
+  RefreshTokens,
+  Logout,
+  LoginGoogle,
+  RequestMagicLink,
+  ConsumeMagicLink,
+} from './useCases/index.js';
 
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
-export type UseCasePorts = {
+export type Ports = {
   users: UserRepository;
   hasher: PasswordHasher;
   tokens: TokenIssuer;
@@ -44,7 +46,7 @@ export type UseCases = {
  * en infra, que solo instancia implementaciones externas. La sesión se ensambla en index.ts.
  */
 export const buildUseCases = (
-  { users, hasher, tokens, magicLinks, sender, google }: UseCasePorts,
+  { users, hasher, tokens, magicLinks, sender, google }: Ports,
   logger: Logger,
 ): UseCases => ({
   registerUser: new RegisterUser(users, hasher, tokens, logger),

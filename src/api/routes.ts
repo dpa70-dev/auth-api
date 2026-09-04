@@ -1,36 +1,12 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { z } from 'zod';
-import { ERROR_KIND_METHOD_NOT_ALLOWED } from './errorKinds.js';
-import type { RegisterUser } from '../app/registerUser.js';
-import type { Login } from '../app/login.js';
-import type { RefreshTokens } from '../app/refreshTokens.js';
-import type { Logout } from '../app/logout.js';
-import type { LoginGoogle } from '../app/loginGoogle.js';
-import type { RequestMagicLink } from '../app/requestMagicLink.js';
-import type { ConsumeMagicLink } from '../app/consumeMagicLink.js';
-import { requireAuth } from './authMiddleware.js';
-import { ApiError } from '../domain/apiError.js';
+import { ERROR_KIND_METHOD_NOT_ALLOWED } from './protocol/errorKinds.js';
+import { requireAuth } from './middlewares/authMiddleware.js';
 import { ERROR_MESSAGES, ErrorCodes } from '../domain/errorCatalog.js';
-import type { TokenIssuer, UserRepository } from '../domain/port/index.js';
+import type { UseCases } from '../app/buildUseCases.js';
+import { buildHandlers } from './buildHandlers.js';
+import type { ApiDeps } from './deps.js';
 import type { Config } from '../config.js';
-
-export type UseCases = {
-  registerUser: RegisterUser;
-  login: Login;
-  refreshTokens: RefreshTokens;
-  logout: Logout;
-  requestMagicLink: RequestMagicLink;
-  consumeMagicLink: ConsumeMagicLink;
-  /** null ⇔ GOOGLE_CLIENT_ID no configurado: la ruta existe pero responde 500 explícito. */
-  loginGoogle: LoginGoogle | null;
-};
-
-export type ApiDeps = {
-  tokens: TokenIssuer;
-  users: UserRepository;
-  config: Config;
-};
 
 /** Los endpoints /auth comparten el rate limit estricto (doc 00 → ítems 41, 48-49). */
 const authLimiter = (config: Config) =>
@@ -50,118 +26,28 @@ const authLimiter = (config: Config) =>
     },
   });
 
+/** Rutas declarativas: la lógica de cada endpoint vive en handlers/, aquí solo se montan. */
 export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
   const router = Router();
+  const {
+    authRegisterHandler,
+    authLoginHandler,
+    authRefreshHandler,
+    authLogoutHandler,
+    authGoogleHandler,
+    magicLinkRequestHandler,
+    magicLinkConsumeHandler,
+    meHandler,
+  } = buildHandlers(useCases, deps);
 
-  router.post('/auth/register', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = credentialsRequest.parse(req.body);
-      const result = await useCases.registerUser.execute({
-        email: body.email,
-        password: body.password,
-        refreshTtlDays: deps.config.refreshTtlDays,
-      });
-      res.status(201).json({ data: result });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/login', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = credentialsRequest.parse(req.body);
-      const result = await useCases.login.execute({
-        email: body.email,
-        password: body.password,
-        refreshTtlDays: deps.config.refreshTtlDays,
-      });
-      res.status(200).json({ data: result });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/refresh', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = refreshRequest.parse(req.body);
-      const result = await useCases.refreshTokens.execute({
-        refreshToken: body.refreshToken,
-        refreshTtlDays: deps.config.refreshTtlDays,
-      });
-      res.status(200).json({ data: result });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/logout', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = refreshRequest.parse(req.body);
-      await useCases.logout.execute({ refreshToken: body.refreshToken });
-      res.status(204).end();
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/google', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = googleRequest.parse(req.body);
-      if (useCases.loginGoogle === null) {
-        throw new ApiError(ErrorCodes.INTERNAL_ERROR, { message: 'El inicio de sesión con Google no está configurado.' });
-      }
-      const result = await useCases.loginGoogle.execute({
-        idToken: body.idToken,
-        ...(body.nonce !== undefined ? { nonce: body.nonce } : {}),
-        refreshTtlDays: deps.config.refreshTtlDays,
-      });
-      res.status(200).json({ data: result });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/magic-link/request', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = magicLinkRequest.parse(req.body);
-      await useCases.requestMagicLink.execute({
-        email: body.email,
-        magicLinkTtlMinutes: deps.config.magicLink.ttlMinutes,
-        consumeBaseUrl: deps.config.magicLink.consumeBaseUrl,
-      });
-      res.status(200).json({ data: { ok: true } });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/auth/magic-link/consume', authLimiter(deps.config), async (req, res, next) => {
-    try {
-      const body = magicLinkConsumeRequest.parse(req.body);
-      const result = await useCases.consumeMagicLink.execute({
-        token: body.token,
-        refreshTtlDays: deps.config.refreshTtlDays,
-      });
-      res.status(200).json({ data: result });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.get('/auth/me', requireAuth(deps.tokens), async (req, res, next) => {
-    try {
-      // requireAuth garantiza userId; el guard es defensa extra del contrato (nunca `!`).
-      const userId = req.userId;
-      if (!userId) throw new ApiError(ErrorCodes.UNAUTHORIZED);
-      const user = await deps.users.findById(userId);
-      if (!user) throw new ApiError(ErrorCodes.UNAUTHORIZED);
-      res.status(200).json({
-        data: { id: user.id, email: user.email, createdAt: user.createdAt },
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
+  router.post('/auth/register', authLimiter(deps.config), authRegisterHandler);
+  router.post('/auth/login', authLimiter(deps.config), authLoginHandler);
+  router.post('/auth/refresh', authLimiter(deps.config), authRefreshHandler);
+  router.post('/auth/logout', authLimiter(deps.config), authLogoutHandler);
+  router.post('/auth/google', authLimiter(deps.config), authGoogleHandler);
+  router.post('/auth/magic-link/request', authLimiter(deps.config), magicLinkRequestHandler);
+  router.post('/auth/magic-link/consume', authLimiter(deps.config), magicLinkConsumeHandler);
+  router.get('/auth/me', requireAuth(deps.tokens), meHandler);
 
   // Express 5 NO produce error `method_not_allowed` por sí solo cuando la ruta
   // existe pero el método no: emite el error aquí para que el handler final dé 405.
@@ -187,37 +73,3 @@ const ALLOWED_METHODS: Record<string, string[]> = {
   '/auth/magic-link/consume': ['POST'],
   '/auth/me': ['GET'],
 };
-
-/** Schemas de la frontera (doc 03 → CredentialsRequest/RefreshRequest/GoogleRequest). */
-const credentialsRequest = z.object({
-  email: z
-    .string({ message: 'email debe ser un string' })
-    .trim()
-    .toLowerCase()
-    .pipe(z.email({ message: 'invalid_email' }).max(254, { message: 'email_too_long' })),
-  password: z
-    .string({ message: 'password debe ser un string' })
-    .min(8, { message: 'too_short' })
-    .max(64, { message: 'too_long' }),
-});
-
-const refreshRequest = z.object({
-  refreshToken: z.string({ message: 'refreshToken debe ser un string' }).min(1, { message: 'too_short' }),
-});
-
-const googleRequest = z.object({
-  idToken: z.string({ message: 'idToken debe ser un string' }).min(1, { message: 'too_short' }),
-  nonce: z.string({ message: 'nonce debe ser un string' }).min(1, { message: 'too_short' }).optional(),
-});
-
-const magicLinkRequest = z.object({
-  email: z
-    .string({ message: 'email debe ser un string' })
-    .trim()
-    .toLowerCase()
-    .pipe(z.email({ message: 'invalid_email' }).max(254, { message: 'email_too_long' })),
-});
-
-const magicLinkConsumeRequest = z.object({
-  token: z.string({ message: 'token debe ser un string' }).min(1, { message: 'too_short' }),
-});
