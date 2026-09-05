@@ -1,6 +1,15 @@
 /**
  * Contrato de repositorio de usuarios y refresh tokens. El dominio posee la semántica
  * (quién busca y qué transición de estado se ejecuta); la infraestructura, el SQL.
+ *
+ * Port deliberadamente GRANDE (decisión QA SOLID · doc 05): agrupa dos agregados del mismo
+ * bounded context — usuario (findByEmail/findByGoogleSub/findById/createUser/markEmailVerified)
+ * y refresh token (findByRefreshTokenHash/insertRefreshToken/markRefreshTokenUsed/
+ * revokeRefreshToken/revokeFamily) — en UN solo contrato porque el refresh token pertenece al
+ * usuario en este dominio (doc 04 → decisión 2: familia = user_id). Tradeoff ISP aceptado: cada
+ * use case recibe el port completo aunque use 2-3 métodos; segregarlo ahora sería
+ * sobre-ingeniería a este tamaño. Si el dominio crece, separar AQUÍ (p. ej. RefreshTokenRepository)
+ * sin tocar ni la entidad ni los use cases: solo desacoplar el puerto y el constructor inyectado.
  */
 import type { Email, GoogleSub, Jti, PasswordHash, Provider, RefreshTokenStatus, Timestamp, UserId } from '../vo/index.js';
 import type { User } from '../entity/user.js';

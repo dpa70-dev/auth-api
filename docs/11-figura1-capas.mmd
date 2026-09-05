@@ -1,0 +1,34 @@
+flowchart LR
+    API["api — src/api/ · 12 archivos"]:::api
+    APP["app — src/app/ · 12 archivos"]:::app
+    DOM["domain — src/domain/ · 26 archivos"]:::domain
+    INFRA["infra — src/infra/ · 8 archivos"]:::infra
+    SRC["src/ y db/ · index, config, contract, db/schema · 4 archivos"]:::srcotro
+    TEST["test/ · 3 archivos"]:::test
+    EXT["paquetes externos · express, zod, drizzle-orm, argon2, jose, pino…"]:::ext
+
+    API -->|34| DOM
+    API -->|10| APP
+    API -->|4| SRC
+    APP -->|135| DOM
+    INFRA -->|58| DOM
+    INFRA -->|7| SRC
+    TEST -->|11| DOM
+    TEST -->|4| SRC
+    TEST -->|2| INFRA
+    SRC -->|8| API
+    SRC -->|6| INFRA
+    SRC -->|2| DOM
+    SRC -->|2| APP
+
+    API -.-> EXT
+    APP -.-> EXT
+    INFRA -.-> EXT
+
+    classDef api fill:#f3e8fd,stroke:#7623bb
+    classDef app fill:#eef2ff,stroke:#4f46e5
+    classDef domain fill:#e8f0fe,stroke:#4285f4
+    classDef infra fill:#e6f4ea,stroke:#188038
+    classDef srcotro fill:#fef7e0,stroke:#f9ab00
+    classDef test fill:#fce8e6,stroke:#c5221f
+    classDef ext fill:#f1f3f4,stroke:#80868b,stroke-dasharray:4 3

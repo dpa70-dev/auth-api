@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from './protocol/errorKinds.js';
 import { requireAuth } from './middlewares/authMiddleware.js';
@@ -26,6 +27,15 @@ const authLimiter = (config: Config) =>
     },
   });
 
+/** Declaración de una ruta: ÚNICA fuente de verdad de método+path (registro y 405 derivan de aquí). */
+type RouteDeclaration = {
+  method: 'get' | 'post';
+  path: string;
+  /** Guardas en orden de ejecución, antes del handler (p. ej. [authLimiter, requireAuth]). */
+  guards: RequestHandler[];
+  handler: RequestHandler;
+};
+
 /** Rutas declarativas: la lógica de cada endpoint vive en handlers/, aquí solo se montan. */
 export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
   const router = Router();
@@ -40,21 +50,30 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     meHandler,
   } = buildHandlers(useCases, deps);
 
-  router.post('/auth/register', authLimiter(deps.config), authRegisterHandler);
-  router.post('/auth/login', authLimiter(deps.config), authLoginHandler);
-  router.post('/auth/refresh', authLimiter(deps.config), authRefreshHandler);
-  router.post('/auth/logout', authLimiter(deps.config), authLogoutHandler);
-  router.post('/auth/google', authLimiter(deps.config), authGoogleHandler);
-  router.post('/auth/magic-link/request', authLimiter(deps.config), magicLinkRequestHandler);
-  router.post('/auth/magic-link/consume', authLimiter(deps.config), magicLinkConsumeHandler);
-  router.get('/auth/me', requireAuth(deps.tokens), meHandler);
+  // Rutas declaradas en UN solo lugar: el registro y el 405 derivan de la misma tabla (OCP/DRY).
+  const routeTable: RouteDeclaration[] = [
+    { method: 'post', path: '/auth/register', guards: [authLimiter(deps.config)], handler: authRegisterHandler },
+    { method: 'post', path: '/auth/login', guards: [authLimiter(deps.config)], handler: authLoginHandler },
+    { method: 'post', path: '/auth/refresh', guards: [authLimiter(deps.config)], handler: authRefreshHandler },
+    { method: 'post', path: '/auth/logout', guards: [authLimiter(deps.config)], handler: authLogoutHandler },
+    { method: 'post', path: '/auth/google', guards: [authLimiter(deps.config)], handler: authGoogleHandler },
+    { method: 'post', path: '/auth/magic-link/request', guards: [authLimiter(deps.config)], handler: magicLinkRequestHandler },
+    { method: 'post', path: '/auth/magic-link/consume', guards: [authLimiter(deps.config)], handler: magicLinkConsumeHandler },
+    { method: 'get', path: '/auth/me', guards: [requireAuth(deps.tokens)], handler: meHandler },
+  ];
+
+  const allowedMethods: Record<string, string[]> = {};
+  for (const route of routeTable) {
+    router[route.method](route.path, ...route.guards, route.handler);
+    (allowedMethods[route.path] ??= []).push(route.method.toUpperCase());
+  }
 
   // Express 5 NO produce error `method_not_allowed` por sí solo cuando la ruta
   // existe pero el método no: emite el error aquí para que el handler final dé 405.
   // Normaliza el trailing slash: POST /auth/me/ es la MISMA ruta que POST /auth/me → 405.
   router.use((req, _res, next) => {
     const path = req.path.replace(/\/+$/, '');
-    const allowed = ALLOWED_METHODS[path];
+    const allowed = allowedMethods[path];
     if (allowed && !allowed.includes(req.method)) {
       next(Object.assign(new Error('Method Not Allowed'), { type: ERROR_KIND_METHOD_NOT_ALLOWED }));
       return;
@@ -63,15 +82,4 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
   });
 
   return router;
-};
-
-const ALLOWED_METHODS: Record<string, string[]> = {
-  '/auth/register': ['POST'],
-  '/auth/login': ['POST'],
-  '/auth/refresh': ['POST'],
-  '/auth/logout': ['POST'],
-  '/auth/google': ['POST'],
-  '/auth/magic-link/request': ['POST'],
-  '/auth/magic-link/consume': ['POST'],
-  '/auth/me': ['GET'],
 };

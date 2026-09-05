@@ -32,7 +32,7 @@ export const buildApp = (overrides: AppDeps = {}) => {
 
   app.use(express.json({ limit: '16kb' }));
 
-  app.use('/api/v1', apiRouter(useCases, { tokens, users, config }));
+  app.use('/api/v1', apiRouter(useCases, { tokens, config }));
   app.use('/api/v1', notFound);
   app.use(finalErrorHandler);
 
