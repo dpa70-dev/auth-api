@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { UseCases } from '../../app/buildUseCases.js';
 import { magicLinkConsumeRequest, magicLinkRequest } from './schemas.js';
+import { sendData } from '../protocol/success.js';
 import type { ApiDeps } from '../deps.js';
 
 /** Handlers del flujo magic link (US-09 request, US-10 consume/auto-cuenta). */
@@ -13,7 +14,7 @@ export const buildMagicLinkHandlers = (useCases: UseCases, deps: ApiDeps) => {
         magicLinkTtlMinutes: deps.config.magicLink.ttlMinutes,
         consumeBaseUrl: deps.config.magicLink.consumeBaseUrl,
       });
-      res.status(200).json({ data: { ok: true } });
+      sendData(res, 200, { ok: true });
     } catch (err) {
       next(err);
     }
@@ -26,7 +27,7 @@ export const buildMagicLinkHandlers = (useCases: UseCases, deps: ApiDeps) => {
         token: body.token,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      res.status(200).json({ data: result });
+      sendData(res, 200, result);
     } catch (err) {
       next(err);
     }

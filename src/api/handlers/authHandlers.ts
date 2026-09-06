@@ -3,6 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { UseCases } from '../../app/buildUseCases.js';
 import { credentialsRequest, googleRequest, refreshRequest } from './schemas.js';
+import { sendData } from '../protocol/success.js';
 import type { ApiDeps } from '../deps.js';
 
 /** Handlers de credenciales (local) y Google. Cada uno es un cierre sobre (useCases, deps). */
@@ -15,7 +16,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      res.status(201).json({ data: result });
+      sendData(res, 201, result);
     } catch (err) {
       next(err);
     }
@@ -29,7 +30,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      res.status(200).json({ data: result });
+      sendData(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -42,7 +43,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshToken: body.refreshToken,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      res.status(200).json({ data: result });
+      sendData(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -52,7 +53,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
     try {
       const body = refreshRequest.parse(req.body);
       await useCases.logout.execute({ refreshToken: body.refreshToken });
-      res.status(204).end();
+      sendData(res, 204, null);
     } catch (err) {
       next(err);
     }
@@ -69,7 +70,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         ...(body.nonce !== undefined ? { nonce: body.nonce } : {}),
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      res.status(200).json({ data: result });
+      sendData(res, 200, result);
     } catch (err) {
       next(err);
     }
