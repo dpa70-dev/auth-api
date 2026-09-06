@@ -6,11 +6,11 @@ import type {
   TokenIssuer,
 } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { emailSchema } from '../../domain/vo/index.js';
+import type { Email } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type RequestMagicLinkCommand = {
-  email: string;
+  email: Email;
   /** TTL en minutos de validez del link desde la emisión. */
   magicLinkTtlMinutes: number;
   /** Base pública del endpoint de consumo; se construye la URL con ?token=<opaco>. */
@@ -37,7 +37,6 @@ export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, Reques
   ) {}
 
   async execute(cmd: RequestMagicLinkCommand): Promise<RequestMagicLinkResult> {
-    const email = emailSchema.parse(cmd.email);
     const now = cmd.now ?? new Date();
 
     const rawToken = randomBytes(32).toString('base64url');
@@ -46,13 +45,13 @@ export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, Reques
     await this.magicLinks.insert({
       id: randomUUID(),
       tokenHash,
-      email,
+      email: cmd.email,
       expiresAt,
     });
     const url = `${cmd.consumeBaseUrl}?token=${rawToken}`;
-    await this.sender.sendMagicLink({ to: email, url });
+    await this.sender.sendMagicLink({ to: cmd.email, url });
 
-    this.logger.info(LOG_EVENTS.MAGIC_LINK_REQUESTED, { email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
+    this.logger.info(LOG_EVENTS.MAGIC_LINK_REQUESTED, { email: cmd.email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
     return { ok: true };
   }
 }

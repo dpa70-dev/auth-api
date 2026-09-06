@@ -3,14 +3,14 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { Logger, PasswordHasher, TokenIssuer, UserRecord, UserRepository } from '../../domain/port/index.js';
-import { emailSchema, plainPasswordSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type RegisterUserCommand = {
-  email: string;
-  password: string;
+  email: Email;
+  password: PlainPassword;
   refreshTtlDays: number;
   now?: Date;
 };
@@ -30,19 +30,17 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
   ) {}
 
   async execute(cmd: RegisterUserCommand): Promise<RegisterUserResult> {
-    const email = emailSchema.parse(cmd.email);
-    const plain = plainPasswordSchema.parse(cmd.password);
     const now = cmd.now ?? new Date();
     const id = userIdSchema.parse(randomUUID());
 
-    const existing = await this.users.findByEmail(email);
+    const existing = await this.users.findByEmail(cmd.email);
     if (existing) throw collisionError(existing);
 
-    const passwordHash = await this.hasher.hash(plain);
+    const passwordHash = await this.hasher.hash(cmd.password);
     try {
       await this.users.createUser({
         id,
-        email,
+        email: cmd.email,
         passwordHash,
         googleSub: null,
         emailVerified: false,
@@ -64,7 +62,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id, email, createdAt: now.toISOString() },
+      user: { id, email: cmd.email, createdAt: now.toISOString() },
     };
   }
 }

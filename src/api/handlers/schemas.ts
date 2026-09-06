@@ -1,16 +1,12 @@
 import { z } from 'zod';
+import { emailSchema, plainPasswordSchema } from '../../domain/vo/index.js';
 
-/** Schemas de la frontera (doc 03 → CredentialsRequest/RefreshRequest/GoogleRequest). */
+/** Schemas de la frontera (doc 03 → CredentialsRequest/RefreshRequest/GoogleRequest).
+ *  Se componen sobre los schemas de los VOs (doc 00 → ítem 88: composición, no redeclaración):
+ *  el parse emite VOs tipados (Email, PlainPassword) que circulan hasta el caso de uso. */
 export const credentialsRequest = z.object({
-  email: z
-    .string({ message: 'email debe ser un string' })
-    .trim()
-    .toLowerCase()
-    .pipe(z.email({ message: 'invalid_email' }).max(254, { message: 'email_too_long' })),
-  password: z
-    .string({ message: 'password debe ser un string' })
-    .min(8, { message: 'too_short' })
-    .max(64, { message: 'too_long' }),
+  email: emailSchema,
+  password: plainPasswordSchema,
 });
 
 export const refreshRequest = z.object({
@@ -23,11 +19,7 @@ export const googleRequest = z.object({
 });
 
 export const magicLinkRequest = z.object({
-  email: z
-    .string({ message: 'email debe ser un string' })
-    .trim()
-    .toLowerCase()
-    .pipe(z.email({ message: 'invalid_email' }).max(254, { message: 'email_too_long' })),
+  email: emailSchema,
 });
 
 export const magicLinkConsumeRequest = z.object({
