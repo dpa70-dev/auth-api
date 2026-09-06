@@ -1,6 +1,6 @@
 # 02 · Flujos de Registro y Autenticación — Representación Gráfica
 
-**Estado**: Fase 2 de Spec Driven Development — representación gráfica de `01-historias-de-usuario.md`, auditada contra el contrato OpenAPI (`03-openapi.yaml`) y el modelo de datos (`04-modelo-de-datos.md`). **Implementada y verificada en la fase 3 (29-ago-2026 → 3-sep-2026)**: cada flujo de este documento tiene su test e2e en `test/e2e.test.ts` y `test/magicLink.test.ts` (US-01..10, 44 tests en verde).
+**Estado**: Fase 2 de Spec Driven Development — representación gráfica de `01-historias-de-usuario.md`, auditada contra el contrato OpenAPI (`03-openapi.yaml`) y el modelo de datos (`04-modelo-de-datos.md`). **Implementada y verificada en la fase 3 (29-ago-2026 → 5-sep-2026)**: cada flujo de este documento tiene su test e2e en `test/e2e.test.ts`, `test/magicLink.test.ts`, `test/changePassword.test.ts` y `test/passwordReset.test.ts` (US-01..12, 74 tests en verde).
 **Fuente**: historias US-01 a US-10 y consideraciones `00-consideraciones-tecnicas.md` (ítems 16-24 errores, 35 hashing, 36-38 tokens, 41-42 hardening/logout, 43-47 Google OIDC, 50-52 magic link).
 **Cómo leer**: cada diagrama es un proceso completo con sus caminos de éxito y error; las respuestas de error siguen siempre el envelope `{ error: { code, message, details? } }` con `requestId` (doc 00 → ítems 20-21); las de éxito, `{ data: ... }`.
 
@@ -284,9 +284,9 @@ sequenceDiagram
     participant E as EmailSender
     participant DB as SQLite
 
-    Note over C,A: Solicitud (US-09)
-    C->>P: POST /api/v1/auth/magic-link/request { email }
-    P->>A: RequestMagicLink(emailNormalizado, ttlMinutes, consumeBaseUrl)
+    Note over C,A: Solicitud (US-09 / US-12)
+    C->>P: POST /api/v1/auth/magic-link/request { email, intent: 'login' | 'password_reset' }
+    P->>A: RequestMagicLink(emailNormalizado, intent, ttlMinutes, consumeBaseUrl)
 
     alt Payload inválido
         P-->>C: 422 VALIDATION_ERROR (email malformado)
@@ -295,10 +295,14 @@ sequenceDiagram
     else Válido — siembre se genera/persiste/envía (anti-enumeración y auto-cuenta)
         A->>A: rawToken = randomBytes(32).base64url
         A->>A: tokenHash = sha256(rawToken) · expiresAt = now + ttl
-        A->>M: insert({ tokenHash, email, status: 'pending', expiresAt })
+        A->>M: insert({ tokenHash, email, purpose: intent, status: 'pending', expiresAt })
         M->>DB: INSERT INTO magic_links (...)
-        A->>E: sendMagicLink({ to: email, url: consumeBaseUrl + '?token=' + rawToken })
-        A-->>C: 200 { data: { ok: true } } — idéntico exista o no el email
+        alt intent = 'password_reset' (US-12)
+            A->>E: sendPasswordResetEmail({ to, url: baseReset + '?token=' + rawToken })
+        else intent = 'login' (US-09)
+            A->>E: sendMagicLink({ to, url: baseConsumo + '?token=' + rawToken })
+        end
+        A-->>C: 200 { data: { ok: true } } — idéntico exista o no el email e independiente del intent
     end
 
     Note over C,A: Consumo (US-10)
@@ -309,9 +313,9 @@ sequenceDiagram
     M->>DB: SELECT ... FROM magic_links WHERE token_hash = ?
     DB-->>M: fila | null
 
-    alt Token inexistente / no pending / vencido → 401 idéntico (anti-enumeración)
+    alt Token inexistente / no pending / vencido / purpose='password_reset' → 401 idéntico (anti-enumeración + F3)
         A-->>C: 401 MAGIC_LINK_INVALID
-    else Token válido y vigente (pending)
+    else Token válido y vigente (pending, purpose='login')
         A->>R: findByEmail(email)
         alt Email NO está registrado (AUTO-CUENTA, US-10 AC-02)
             Note over A,R: Alta implícita: provider 'magic', email_verified=1, sin password_hash ni google_sub (CHECK = email_verified permite la fila)
@@ -332,6 +336,53 @@ Notas:
 - **Hash, no claro (US-09 AC-03)**: la BD guarda solo `sha256(rawToken)`; un leak de `magic_links` no expone enlaces utilizables.
 - **Un solo uso (US-10 AC-04)**: `markUsed` se ejecuta sobre el hash; reusar el token → 401 `MAGIC_LINK_INVALID` idéntico a inexistente/vencido (anti-enumeración).
 - El email verificado del consume (auto-cuenta o `markEmailVerified`) habilita el CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5).
+- **Intento y propósito (US-12)**: `intent` del request (default `'login'`) se persiste como `purpose`; la URL de consumo la resuelve el handler según el intent (`MAGIC_LINK_CONSUME_BASE_URL` vs `MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL`, doc 00 → nº 56). **F3**: un enlace de `password_reset` presentado en el consume de sesión responde el mismo 401 idéntico.
+
+---
+
+### 6.1 Recuperación de contraseña — US-12
+
+Mismo canal del diagrama 6 con `intent: 'password_reset'`: el enlace se envía contra
+`MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL` y se persiste con `purpose = 'password_reset'`.
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant P as Presentación
+    participant A as Aplicación · ResetPassword
+    participant M as MagicLinkRepository
+    participant R as UserRepository
+    participant H as PasswordHasher
+    participant DB as SQLite
+
+    C->>P: POST /api/v1/auth/password/reset { token, password }
+    P->>A: ResetPassword(token, newPassword)
+    A->>A: tokenHash = sha256(token)
+    A->>M: findByTokenHash(tokenHash)
+    M->>DB: SELECT ... FROM magic_links WHERE token_hash = ?
+
+    alt Token inexistente / no pending / vencido / purpose != 'password_reset' → 401 idéntico (F3)
+        A-->>C: 401 MAGIC_LINK_INVALID
+    else Token válido y vigente (pending, purpose='password_reset')
+        A->>H: hash(newPassword) → argon2id
+        A->>R: findByEmail(email)
+        alt Email NO registrado (F2 — AUTO-CUENTA local)
+            A->>R: createUser({ id: uuid, email, passwordHash, googleSub: null, emailVerified: true })
+        else Email registrado
+            A->>R: updatePasswordHash(user.id, passwordHash)
+        end
+        A->>M: markUsed(tokenHash) — un solo uso
+        A->>R: revokeFamily(user.id) — F1: derriba TODAS las sesiones
+        A-->>C: 204 No Content — NO emite sesión (el cliente redirige al login)
+    end
+```
+
+Notas del reset:
+
+- **Sin sesión**: el reset responde `204`, jamás un par de tokens — el flujo "olvidé" no crea sesión sin pasar por el login.
+- **F1** — el reset derriba TODAS las sesiones (misma política que change-password, US-11): las sesiones emitidas bajo el secreto viejo dejan de valer; el cliente re-autentica con el nuevo.
+- **F2** — email no registrado → auto-cuenta local (`email_verified = 1`): el enlace prueba la posesión del email (coherente con US-10 AC-02); quien "olvidó" su contraseña sin estar registrado queda registrado con la nueva.
+- **F3** — separación de canales: un enlace de login no restablece contraseña, y un enlace de reset no crea sesión — ambos responden el mismo 401 `MAGIC_LINK_INVALID` (anti-enumeración).
 
 ---
 
@@ -346,11 +397,11 @@ flowchart LR
     end
 
     subgraph APP[Aplicación]
-        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink]
+        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink · ChangePassword · ResetPassword]
     end
 
     subgraph DOM[Dominio]
-        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus]
+        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus · MagicLinkPurpose]
         VA[«puerto» PasswordHasher]
         VB[«puerto» TokenService]
         VC[«puerto» UserRepository]
@@ -410,5 +461,5 @@ Notas:
 | 3. Refresco de tokens | US-03 | 38, 40 |
 | 4. Logout | US-04 | 38, 42 |
 | 5. Login con Google | US-07, US-08 (AC-02) | 43-47 |
-| 6. Magic link | US-09, US-10 | 38, 41, 55 |
+| 6. Magic link (+ reset 6.1) | US-09, US-10, US-12 | 38, 41, 55, 56 |
 | 7. Capas y puertos | (transversal) | 25-28, 6.1 |

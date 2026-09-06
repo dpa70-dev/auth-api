@@ -1,7 +1,7 @@
 # 01 · Historias de Usuario y Criterios de Aceptación — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development (contrato OpenAPI en `03-openapi.yaml`) — historias completadas como entrada de la especificación (doc 03) y de la implementación (fase 3, resuelta: 44 tests e2e en verde, ver `test/e2e.test.ts` y `test/magicLink.test.ts`).
-**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), **acceso por magic link sin contraseña (US-09/10)**, colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
+**Estado**: Fase 2 de Spec Driven Development (contrato OpenAPI en `03-openapi.yaml`) — historias completadas como entrada de la especificación (doc 03) y de la implementación (fase 3, resuelta: 74 tests e2e en verde, ver `test/e2e.test.ts`, `test/magicLink.test.ts`, `test/changePassword.test.ts` y `test/passwordReset.test.ts`).
+**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), **acceso por magic link sin contraseña (US-09/10)**, **cambio de contraseña (US-11)** y **recuperación de contraseña por email (US-12)**, colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
 
 ---
 
@@ -185,11 +185,46 @@
 
 ---
 
+## US-11 · Cambio de contraseña
+
+**Como** usuario autenticado con contraseña local, **quiero** cambiarla probando la actual, **para** proteger mi cuenta si el secreto se filtró.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un usuario autenticado (Bearer válido), cuando hago `POST /auth/change-password` con `{ currentPassword, newPassword }` válidos, entonces obtengo `204 No Content` y el hash nuevo queda persistido.
+- **AC-02** — **F1 (revocación total)**: el cambio revoca TODAS las sesiones del usuario; los refresh anteriores dejan de funcionar y el cliente re-autentica. El access vigente no se revoca explícitamente (expira en 5-15 min, comportamiento esperado).
+- **AC-03** — Contraseña actual incorrecta → `401` `INVALID_CREDENTIALS` genérico (misma semántica que US-02) con log del intento fallido.
+- **AC-04** — Cuenta sin contraseña local configurada (solo-Google o solo-magic, `password_hash = NULL`) → `409` `ACCOUNT_HAS_NO_PASSWORD` (no hay secreto actual que probar).
+- **AC-05** — `newPassword` fuera de las reglas NIST (mín. 8, máx. 64) → `422` con `details` por campo; el endpoint está bajo el rate limit de auth → `429`.
+- **AC-06** — Sin token o token inválido → `401` `UNAUTHORIZED` (guarda `requireAuth`).
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/change-password` · body `{ currentPassword, newPassword }` · header `Authorization: Bearer` · respuestas 204/400/401/409/422/429/500.
+
+---
+
+## US-12 · Recuperación de contraseña (olvidé mi contraseña)
+
+**Como** usuario que olvidó su contraseña, **quiero** recibir un enlace por email que me permita definir una nueva, **para** recuperar el acceso a mi cuenta.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un email válido, cuando hago `POST /auth/magic-link/request` con `{ email, intent: 'password_reset' }`, entonces obtengo `200 { data: { ok: true } }` **idéntico** exista o no el email (anti-enumeración: misma forma y misma cantidad de trabajo que US-09), y se envía un email con la URL `MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL?token=<opaco>`.
+- **AC-02** — Con ese token (no vencido, `purpose = 'password_reset'`), cuando hago `POST /auth/password/reset` con `{ token, password }`, entonces obtengo `204 No Content`. **NO se emite sesión**: el cliente redirige al login con el secreto nuevo.
+- **AC-03** — **F1**: el reset revoca TODAS las sesiones del usuario (misma política que US-11 AC-02).
+- **AC-04** — **F2**: email aún no registrado → se crea una auto-cuenta local (`email_verified = 1`, el enlace prueba la posesión del email, coherente con US-10 AC-02) y se asigna la contraseña; el usuario puede loguear de inmediato.
+- **AC-05** — **F3 (separación de canales)**: un enlace emitido con `intent: 'login'` presentado en el reset → `401` `MAGIC_LINK_INVALID`; un enlace de `password_reset` presentado en `/auth/magic-link/consume` → el mismo `401` idéntico.
+- **AC-06** — Token inexistente, vencido o ya usado → `401` `MAGIC_LINK_INVALID` idéntico en forma (anti-enumeración + un solo uso, patrón US-10 AC-04/AC-05).
+- **AC-07** — `password` fuera de las reglas NIST → `422`; el endpoint está bajo el rate limit de auth → `429`.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/password/reset` · body `{ token, password }` · respuestas 204/400/401/422/429/500. El token ES la credencial: la ruta lleva solo `authLimiter` (sin `requireAuth`).
+
+---
+
 ## Fuera de alcance (para fases futuras)
 
 - ~~Verificación de email~~ — **resuelto con magic link (US-09/10)**: emails locales se verifican al consumir un enlace (`email_verified = 1`); sigue aplicando que los de Google vienen verificados por OIDC.
 - **Vincular cuentas locales con cuentas Google (account linking)** — política actual: sin auto-linking (ver doc `00-consideraciones-tecnicas.md` → nº 46).
-- Recuperación / reset de contraseña.
+- ~~Recuperación / reset de contraseña~~ — **resuelto con magic link de propósito `password_reset` (US-12)**: reutiliza el canal de enlaces mágicos (US-09/10) con un `intent`/`purpose` propio; sin tabla ni flujo alternativo.
 - 2FA / MFA.
 - Roles, permisos y autorización por recurso (el nombre del proyecto sugiere `rol` — se modelará en una iteración posterior).
 - Gestión multi-dispositivo / listado de sesiones activas.
@@ -204,4 +239,5 @@
 2. *(Resuelto el 27-ago-2026)*: argon2id · jose + middleware propio · estructura por capas · Drizzle · **Google OIDC (GIS token flow + jose; modelo `users` nullable)**. No quedan opciones abiertas → la especificación partió directo de estas historias.
 3. *(Resuelto el 29-ago-2026)*: **modelo de datos** en `docs/04-modelo-de-datos.md` (ERD + DDL `users`/`refresh_tokens`, trazabilidad columna→fuente) y **auditoría de fidelidad** de los flujos en `docs/02-flujos-registro-autenticacion.md` (logout = soft-revoke para satisfacer AC-02, ramas 429 en /refresh y /google, notas Google-only y token opaco).
 4. *(Resuelto el 29-ago-2026)*: **implementación contra el contrato (SDD)** con `openapi-typescript` (tipos derivados del contrato) y contract tests.
-5. *(Resuelto el 3-sep-2026)*: **magic link (US-09/10)** — contrato (doc 03), modelo `magic_links` (doc 04), diagrama 6 (doc 02), consideraciones nº 55 (doc 00) e implementación completa con 10 tests nuevos en `test/magicLink.test.ts` (44 total).
+5. *(Resuelto el 3-sep-2026)*: **magic link (US-09/10)** — contrato (doc 03), modelo `magic_links` (doc 04), diagrama 6 (doc 02), consideraciones nº 55 (doc 00) e implementación completa con 10 tests nuevos en `test/magicLink.test.ts` (56 total).
+6. *(Resuelto el 5-sep-2026)*: **cambio y recuperación de contraseña (US-11/12)** — `intent`/`purpose` en el contrato (doc 03), columna `magic_links.purpose` (doc 04), flujo de reset en el diagrama 6 (doc 02), consideración nº 56 (doc 00) e implementación con 18 tests nuevos en `test/changePassword.test.ts` (7) y `test/passwordReset.test.ts` (11) — **74 total**.

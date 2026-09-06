@@ -15,6 +15,13 @@
       "when": 1788469667274,
       "tag": "0001_complete_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788734842344,
+      "tag": "0002_busy_avengers",
+      "breakpoints": true
     }
   ]
 }

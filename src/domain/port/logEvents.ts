@@ -17,6 +17,12 @@ export const LOG_EVENTS = {
   MAGIC_LINK_CONSUMED: 'magic_link_consumed',
   MAGIC_LINK_INVALID_ATTEMPT: 'magic_link_invalid_attempt',
   USER_REGISTERED_VIA_MAGIC_LINK: 'user_registered_via_magic_link',
+  PASSWORD_CHANGED: 'password_changed',
+  PASSWORD_CHANGE_FAILED: 'password_change_failed',
+  PASSWORD_RESET_REQUESTED: 'password_reset_requested',
+  PASSWORD_RESET_CONSUMED: 'password_reset_consumed',
+  PASSWORD_RESET_INVALID_ATTEMPT: 'password_reset_invalid_attempt',
+  PASSWORD_RESET_REGISTERED: 'password_reset_registered',
 } as const;
 
 /** Unión de eventos válidos: el puerto solo admite estos — compilar = no hay typos. */
@@ -27,4 +33,5 @@ export const LOG_REASONS = {
   BAD_PASSWORD: 'bad_password',
   UNKNOWN_EMAIL: 'unknown_email',
   GOOGLE_ONLY_USER: 'google_only_user',
+  PASSWORD_MISMATCH: 'password_mismatch',
 } as const;

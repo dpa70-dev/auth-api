@@ -61,4 +61,6 @@ export interface UserRepository {
   revokeFamily(userId: UserId): Promise<void>;
   /** SET email_verified = true (posesión de email probada vía magic link, doc 04 → decisión 5). */
   markEmailVerified(email: Email): Promise<void>;
+  /** SET password_hash = nuevo (cambio de contraseña: US-11 change-password y US-12 reset vía magic link). */
+  updatePasswordHash(userId: UserId, passwordHash: PasswordHash): Promise<void>;
 }

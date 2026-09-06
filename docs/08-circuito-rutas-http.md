@@ -57,12 +57,16 @@ la de presentación en `src/api/handlers/`.
 | `POST /auth/google` | `authLimiter` | authGoogle → `loginGoogle` |
 | `POST /auth/magic-link/request` | `authLimiter` | magicLinkRequest → `requestMagicLink` |
 | `POST /auth/magic-link/consume` | `authLimiter` | magicLinkConsume → `consumeMagicLink` |
+| `POST /auth/change-password` | `requireAuth(tokens)` + `authLimiter` | authChangePassword → `changePassword` |
+| `POST /auth/password/reset` | `authLimiter` | passwordReset → `resetPassword` |
 | `GET /auth/me` | `requireAuth(tokens)` | me → `getMe` |
 
-**Guarda por método**: los 7 endpoints `POST /auth/*` comparten `authLimiter`
+**Guarda por método**: los 9 endpoints `POST /auth/*` comparten `authLimiter`
 (window/limit desde `config.rateLimit`, ítems 41 y 48-49 de doc 00). El único GET
 (`/auth/me`) usa `requireAuth`, que valida access token (firma, exp, sub) y deja
-`req.userId`.
+`req.userId`. `/auth/change-password` además exige `requireAuth` **primero** (la
+contraseña actual se prueba contra la cuenta del token, US-11); `/auth/password/reset`
+NO lleva `requireAuth` — el token del magic link ES la credencial (US-12).
 
 ---
 
@@ -101,7 +105,7 @@ Todo endpoint sigue el mismo contrato de handler (`src/api/handlers/*`):
 
 1. **Parse de frontera** con zod (`schemas.ts`) → 422 en fallo.
 2. **Delegación al use case** — la capa app (`src/app/useCases/`) ejecuta la lógica.
-3. **Respuesta envelope** `{ data }` (201 register, 204 logout, 200 resto).
+3. **Respuesta envelope** `{ data }` (201 register, 204 logout/change-password/password-reset, 200 resto).
 4. **Cualquier error → `next(err)`** → cae al handler final.
 
 `GET /auth/me` no es excepción: aunque su caso de uso (`getMe`) es una lectura simple,

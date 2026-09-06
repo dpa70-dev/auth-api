@@ -44,9 +44,11 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     authLoginHandler,
     authRefreshHandler,
     authLogoutHandler,
+    authChangePasswordHandler,
     authGoogleHandler,
     magicLinkRequestHandler,
     magicLinkConsumeHandler,
+    passwordResetHandler,
     meHandler,
   } = buildHandlers(useCases, deps);
 
@@ -56,9 +58,13 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     { method: 'post', path: '/auth/login', guards: [authLimiter(deps.config)], handler: authLoginHandler },
     { method: 'post', path: '/auth/refresh', guards: [authLimiter(deps.config)], handler: authRefreshHandler },
     { method: 'post', path: '/auth/logout', guards: [authLimiter(deps.config)], handler: authLogoutHandler },
+    // US-11: requiere sesión (la contraseña actual es el reto) y luego el throttle de /auth.
+    { method: 'post', path: '/auth/change-password', guards: [requireAuth(deps.tokens), authLimiter(deps.config)], handler: authChangePasswordHandler },
     { method: 'post', path: '/auth/google', guards: [authLimiter(deps.config)], handler: authGoogleHandler },
     { method: 'post', path: '/auth/magic-link/request', guards: [authLimiter(deps.config)], handler: magicLinkRequestHandler },
     { method: 'post', path: '/auth/magic-link/consume', guards: [authLimiter(deps.config)], handler: magicLinkConsumeHandler },
+    // US-12: el token del email ES la credencial → solo authLimiter (sin requireAuth).
+    { method: 'post', path: '/auth/password/reset', guards: [authLimiter(deps.config)], handler: passwordResetHandler },
     { method: 'get', path: '/auth/me', guards: [requireAuth(deps.tokens)], handler: meHandler },
   ];
 

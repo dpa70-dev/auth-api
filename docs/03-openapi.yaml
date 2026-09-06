@@ -7,11 +7,12 @@ info:
     identifier: MIT
   description: |
     API REST de ejemplo para registro y autenticación: registro y login con email/contraseña,
-    login con Google (OIDC — GIS token flow), refresh con rotación, logout y acceso a un recurso
-    protegido.
+    login con Google (OIDC — GIS token flow), refresh con rotación, logout, acceso a un recurso
+    protegido, acceso por magic link sin contraseña, cambio de contraseña y recuperación de
+    contraseña por email.
 
     **Contrato de la Fase 2 de Spec Driven Development** — derivado de las historias de usuario
-    (`01-historias-de-usuario.md`, US-01 a US-08) y de las consideraciones técnicas
+    (`01-historias-de-usuario.md`, US-01 a US-12) y de las consideraciones técnicas
     (`00-consideraciones-tecnicas.md`). La representación gráfica de los flujos está en
     `02-flujos-registro-autenticacion.md`.
 
@@ -370,6 +371,9 @@ paths:
         **hash SHA-256** del token opaco (≥ 32 bytes aleatorios), nunca el token en claro. El enlace
         expira en un TTL corto configurable (`MAGIC_LINK_TTL_MINUTES`, default 15, máx 60). La auto-cuenta
         se resuelve en el consume (US-10 AC-02): un link enviado a un email no registrado crea la cuenta.
+        El campo `intent` selecciona el canal (US-11/12): `login` (default) envía la URL de consumo de
+        sesión; `password_reset` envía la URL de recuperación de contraseña con la MISMA forma de respuesta
+        y la MISMA cantidad de trabajo (anti-enumeración también en el canal de recuperación).
       requestBody:
         required: true
         content:
@@ -378,9 +382,14 @@ paths:
               $ref: '#/components/schemas/MagicLinkRequest'
             examples:
               valido:
-                summary: Payload válido
+                summary: Payload válido (intent omiso = login, US-09)
                 value:
                   email: ana@example.com
+              reseteo:
+                summary: Solicitud de recuperación de contraseña (US-12)
+                value:
+                  email: ana@example.com
+                  intent: password_reset
       responses:
         '200':
           description: Enlace enviado (o no) — respuesta idéntica siempre (anti-enumeración).
@@ -414,6 +423,8 @@ paths:
         y se responde 200. Si ya está registrado (local/Google), se marca `email_verified = 1` y se emite
         sesión sobre la cuenta existente. **Un solo uso**: el token se marca `used` al consumirse. Token
         inexistente, revocado o vencido → 401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+        El consumo de sesión solo acepta enlaces `purpose = 'login'`: un enlace de recuperación
+        (`password_reset`) presentado aquí responde el mismo 401 idéntico (US-12 F3).
       requestBody:
         required: true
         content:
@@ -457,6 +468,108 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Cambiar contraseña (usuario autenticado)
+      description: |
+        Reemplaza la contraseña del usuario autenticado probando la actual (US-11). Requiere access
+        token (Bearer). La contraseña actual incorrecta → 401 `INVALID_CREDENTIALS` genérico (misma
+        semántica que /login, anti-enumeración). Cuenta sin contraseña configurada (solo-Google o
+        solo-magic) → 409 `ACCOUNT_HAS_NO_PASSWORD`. **F1**: el cambio revoca TODAS las sesiones del
+        usuario (`revokeFamily`) — compensa sesiones emitidas bajo el secreto viejo; el cliente
+        re-autentica. El access vigente no se revoca explícitamente: expira solo por su corta vida
+        (5-15 min), comportamiento esperado.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            examples:
+              valido:
+                summary: Cambio correcto (US-11 AC-01)
+                value:
+                  currentPassword: contraseñaVieja123
+                  newPassword: contraseñaNuevaSegura456
+      responses:
+        '204':
+          description: Contraseña actualizada y todas las sesiones revocadas (US-11 AC-01/AC-02).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            No autenticado (token ausente/vencido/malformado/firma no verificada, `UNAUTHORIZED`) o
+            contraseña actual incorrecta (`INVALID_CREDENTIALS`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: La cuenta no tiene contraseña configurada (solo-Google o solo-magic).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sin-contrasena:
+                  summary: Cuenta sin password_hash (US-11 AC-04)
+                  value:
+                    error:
+                      code: ACCOUNT_HAS_NO_PASSWORD
+                      message: La cuenta no tiene una contraseña configurada.
+                      requestId: req_01J4X8K2Z2
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Recuperar contraseña (consumo del magic link de reset)
+      description: |
+        Consume un magic link emitido con `intent: password_reset` y reemplaza (o asigna) la
+        contraseña del email del enlace (US-12). El token ES la credencial: la ruta solo lleva
+        `authLimiter` (sin requireAuth). **NO emite sesión** — respuesta `204`; el cliente redirige
+        al login con el secreto nuevo. **F2**: email aún no registrado → auto-cuenta local (el enlace
+        prueba la posesión del email, coherente con US-10 AC-02). **F1**: el reset revoca TODAS las
+        sesiones del usuario. Token inexistente, vencido, ya usado o de otro propósito (`login`) →
+        401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+            examples:
+              valido:
+                summary: Reset con token del email (US-12 AC-01)
+                value:
+                  token: ejOpc0aQnFgW4s9XyZ2bCdEfGhIjKlMnOpQrStUvWx
+                  password: nuevaContraseñaSegura789
+      responses:
+        '204':
+          description: Contraseña reemplazada/asignada y sesiones revocadas; sin sesión emitida (US-12 AC-01/AC-02).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Token inexistente, vencido, ya usado o de otro propósito — forma idéntica (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -486,6 +599,24 @@ components:
           $ref: '#/components/schemas/Email'
         password:
           $ref: '#/components/schemas/Password'
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      additionalProperties: false
+      properties:
+        currentPassword:
+          $ref: '#/components/schemas/Password'
+        newPassword:
+          $ref: '#/components/schemas/Password'
+    PasswordResetRequest:
+      type: object
+      required: [token, password]
+      additionalProperties: false
+      properties:
+        token:
+          $ref: '#/components/schemas/MagicLinkToken'
+        password:
+          $ref: '#/components/schemas/Password'
     RefreshRequest:
       type: object
       required: [refreshToken]
@@ -510,6 +641,14 @@ components:
             (si no → 401 UNAUTHORIZED); si el ID token no lo incluye, se ignora. Opcional en el schema por el
             flujo condicional de Google (no siempre emite nonce), no porque sea prescindible cuando sí existe.
           example: vZ3mX9qK2rT8wY5bN1cL7pD0sF4hJ6a
+    MagicLinkIntent:
+      type: string
+      enum: [login, password_reset]
+      description: |
+        Canal del magic link (US-09/10 vs US-12). `login` (default) → enlace de acceso con sesión;
+        `password_reset` → enlace de recuperación de contraseña (misma forma de respuesta y mismo
+        trabajo realizado — anti-enumeración también en el reset). Se persiste en `magic_links.purpose`.
+      example: login
     MagicLinkRequest:
       type: object
       required: [email]
@@ -517,6 +656,8 @@ components:
       properties:
         email:
           $ref: '#/components/schemas/Email'
+        intent:
+          $ref: '#/components/schemas/MagicLinkIntent'
     MagicLinkRequestResponse:
       type: object
       required: [data]
@@ -638,10 +779,10 @@ components:
               description: |
                 Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                 documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID y RATE_LIMITED;
-                UNAUTHORIZED y MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y
-                METHOD_NOT_ALLOWED cubren el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR
-                para 500.
+                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID,
+                ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; UNAUTHORIZED y MALFORMED_REQUEST completan la
+                matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405 centralizado
+                (doc 00 → ítem 24); INTERNAL_ERROR para 500.
               enum:
                 - VALIDATION_ERROR
                 - INVALID_CREDENTIALS
@@ -649,6 +790,7 @@ components:
                 - ACCOUNT_EXISTS_WITH_GOOGLE
                 - EMAIL_NOT_VERIFIED
                 - MAGIC_LINK_INVALID
+                - ACCOUNT_HAS_NO_PASSWORD
                 - RATE_LIMITED
                 - UNAUTHORIZED
                 - MALFORMED_REQUEST

@@ -69,6 +69,8 @@ export const magicLinks = sqliteTable(
     id: text('id').primaryKey(),
     tokenHash: text('token_hash').notNull(),
     email: text('email').notNull(),
+    // purpose: login (US-09/10) o password_reset (US-12); 1:1 con el VO magicLinkPurpose.
+    purpose: text('purpose', { enum: ['login', 'password_reset'] }).notNull().default('login'),
     status: text('status', { enum: ['pending', 'used', 'revoked'] }).notNull().default('pending'),
     expiresAt: text('expires_at').notNull(),
     createdAt: text('created_at').notNull(),
@@ -79,5 +81,7 @@ export const magicLinks = sqliteTable(
     index('magic_links_status_idx').on(t.status),
     // doc 04 → magic_links: CHECK (status IN ('pending','used','revoked'))
     check('magic_links_status_check', sql`${t.status} IN ('pending','used','revoked')`),
+    // doc 04 → magic_links: CHECK (purpose IN ('login','password_reset'))
+    check('magic_links_purpose_check', sql`${t.purpose} IN ('login','password_reset')`),
   ],
 );

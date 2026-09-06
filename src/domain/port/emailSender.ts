@@ -8,4 +8,6 @@ import type { Email } from '../vo/index.js';
 export interface EmailSender {
   /** Envía un magic link de acceso. El token NUNCA debe filtrarse al logger del consumidor. */
   sendMagicLink(input: { to: Email; url: string }): Promise<void>;
+  /** Envía un email de restablecimiento de contraseña (US-12). El token NUNCA debe filtrarse. */
+  sendPasswordResetEmail(input: { to: Email; url: string }): Promise<void>;
 }

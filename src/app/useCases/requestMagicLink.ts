@@ -6,14 +6,16 @@ import type {
   TokenIssuer,
 } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import type { Email } from '../../domain/vo/index.js';
+import type { Email, MagicLinkPurpose } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type RequestMagicLinkCommand = {
   email: Email;
+  /** login (US-09/10) o password_reset (US-12); define el purpose persistido y el canal del email. */
+  intent: MagicLinkPurpose;
   /** TTL en minutos de validez del link desde la emisión. */
   magicLinkTtlMinutes: number;
-  /** Base pública del endpoint de consumo; se construye la URL con ?token=<opaco>. */
+  /** Base pública del endpoint de consumo; se construye la URL con ?token=<opaco>. Resuelta por intent en el handler. */
   consumeBaseUrl: string;
   now?: Date;
 };
@@ -46,12 +48,18 @@ export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, Reques
       id: randomUUID(),
       tokenHash,
       email: cmd.email,
+      purpose: cmd.intent,
       expiresAt,
     });
     const url = `${cmd.consumeBaseUrl}?token=${rawToken}`;
-    await this.sender.sendMagicLink({ to: cmd.email, url });
+    if (cmd.intent === 'password_reset') {
+      await this.sender.sendPasswordResetEmail({ to: cmd.email, url });
+      this.logger.info(LOG_EVENTS.PASSWORD_RESET_REQUESTED, { email: cmd.email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
+    } else {
+      await this.sender.sendMagicLink({ to: cmd.email, url });
+      this.logger.info(LOG_EVENTS.MAGIC_LINK_REQUESTED, { email: cmd.email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
+    }
 
-    this.logger.info(LOG_EVENTS.MAGIC_LINK_REQUESTED, { email: cmd.email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
     return { ok: true };
   }
 }

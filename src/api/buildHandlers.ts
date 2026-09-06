@@ -11,9 +11,11 @@ export type Handlers = {
   authLoginHandler: RequestHandler;
   authRefreshHandler: RequestHandler;
   authLogoutHandler: RequestHandler;
+  authChangePasswordHandler: RequestHandler;
   authGoogleHandler: RequestHandler;
   magicLinkRequestHandler: RequestHandler;
   magicLinkConsumeHandler: RequestHandler;
+  passwordResetHandler: RequestHandler;
   meHandler: RequestHandler;
 };
 

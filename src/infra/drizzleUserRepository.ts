@@ -115,6 +115,10 @@ export class DrizzleUserRepository implements UserRepository {
   async markEmailVerified(email: Email): Promise<void> {
     this.db.update(users).set({ emailVerified: true }).where(eq(users.email, email)).run();
   }
+
+  async updatePasswordHash(userId: UserId, passwordHash: PasswordHash): Promise<void> {
+    this.db.update(users).set({ passwordHash }).where(eq(users.id, userId)).run();
+  }
 }
 
 type RefreshRecord = NonNullable<Awaited<ReturnType<UserRepository['findByRefreshTokenHash']>>>;

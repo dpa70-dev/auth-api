@@ -19,12 +19,21 @@ const readJson = async <T>(res: Response): Promise<T> => (await res.json()) as T
 /** Fake en memoria del puerto EmailSender que captura los envíos para poder consumir el link. */
 class FakeEmailSender implements EmailSender {
   sent: { to: string; url: string }[] = [];
+  sentReset: { to: string; url: string }[] = [];
   async sendMagicLink({ to, url }: { to: Email; url: string }): Promise<void> {
     this.sent.push({ to, url });
+  }
+  async sendPasswordResetEmail({ to, url }: { to: Email; url: string }): Promise<void> {
+    this.sentReset.push({ to, url });
   }
   lastUrl(): string {
     const last = this.sent.at(-1);
     if (!last) throw new Error('no se envió ningún magic link');
+    return last.url;
+  }
+  lastResetUrl(): string {
+    const last = this.sentReset.at(-1);
+    if (!last) throw new Error('no se envió ningún email de reset');
     return last.url;
   }
 }

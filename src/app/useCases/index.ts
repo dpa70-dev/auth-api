@@ -6,3 +6,5 @@ export { LoginGoogle, type LoginGoogleCommand, type LoginGoogleResult } from './
 export { RequestMagicLink, type RequestMagicLinkCommand, type RequestMagicLinkResult } from './requestMagicLink.js';
 export { ConsumeMagicLink, type ConsumeMagicLinkCommand, type ConsumeMagicLinkResult } from './consumeMagicLink.js';
 export { GetMe, type GetMeCommand, type GetMeResult } from './getMe.js';
+export { ChangePassword, type ChangePasswordCommand } from './changePassword.js';
+export { ResetPassword, type ResetPasswordCommand } from './resetPassword.js';

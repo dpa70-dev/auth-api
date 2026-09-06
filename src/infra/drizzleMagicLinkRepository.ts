@@ -2,7 +2,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { and, eq } from 'drizzle-orm';
 import type { MagicLinkRecord, MagicLinkRepository } from '../domain/port/index.js';
 import { magicLinks } from '../db/schema.js';
-import type { Email, MagicLinkStatus, Timestamp } from '../domain/vo/index.js';
+import type { Email, MagicLinkPurpose, MagicLinkStatus, Timestamp } from '../domain/vo/index.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 
@@ -10,6 +10,7 @@ const mapRow = (row: typeof magicLinks.$inferSelect): MagicLinkRecord => ({
   id: row.id,
   tokenHash: row.tokenHash,
   email: row.email as Email,
+  purpose: row.purpose as MagicLinkPurpose,
   status: row.status as MagicLinkStatus,
   expiresAt: toIso(row.expiresAt),
 });
@@ -21,12 +22,14 @@ export class DrizzleMagicLinkRepository implements MagicLinkRepository {
     id: string;
     tokenHash: string;
     email: Email;
+    purpose: MagicLinkPurpose;
     expiresAt: Timestamp;
   }): Promise<void> {
     this.db.insert(magicLinks).values({
       id: input.id,
       tokenHash: input.tokenHash,
       email: input.email,
+      purpose: input.purpose,
       status: 'pending',
       expiresAt: input.expiresAt,
       createdAt: new Date().toISOString(),

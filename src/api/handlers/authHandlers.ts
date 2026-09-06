@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { UseCases } from '../../app/buildUseCases.js';
-import { credentialsRequest, googleRequest, refreshRequest } from './schemas.js';
+import { changePasswordRequest, credentialsRequest, googleRequest, refreshRequest } from './schemas.js';
 import { sendData } from '../protocol/success.js';
 import type { ApiDeps } from '../deps.js';
 
@@ -59,6 +59,23 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
     }
   };
 
+  const authChangePasswordHandler: RequestHandler = async (req, res, next) => {
+    try {
+      const body = changePasswordRequest.parse(req.body);
+      // requireAuth garantiza userId; el guard es defensa extra del contrato (nunca `!`).
+      const userId = req.userId;
+      if (!userId) throw new ApiError(ErrorCodes.UNAUTHORIZED);
+      await useCases.changePassword.execute({
+        userId,
+        currentPassword: body.currentPassword,
+        newPassword: body.newPassword,
+      });
+      sendData(res, 204, null);
+    } catch (err) {
+      next(err);
+    }
+  };
+
   const authGoogleHandler: RequestHandler = async (req, res, next) => {
     try {
       const body = googleRequest.parse(req.body);
@@ -76,5 +93,5 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
     }
   };
 
-  return { authRegisterHandler, authLoginHandler, authRefreshHandler, authLogoutHandler, authGoogleHandler };
+  return { authRegisterHandler, authLoginHandler, authRefreshHandler, authLogoutHandler, authChangePasswordHandler, authGoogleHandler };
 };

@@ -43,6 +43,12 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
       this.logger.warn(LOG_EVENTS.MAGIC_LINK_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }
+    // F3 (aprobado): un link de reset no crea sesiones. El consumo de login solo acepta purpose='login'
+    // — un link de password_reset presentado aquí es tan inválido como un token desconocido.
+    if (found.purpose !== 'login') {
+      this.logger.warn(LOG_EVENTS.MAGIC_LINK_INVALID_ATTEMPT, { email: found.email });
+      throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
+    }
 
     let user = await this.users.findByEmail(found.email);
     if (user) {

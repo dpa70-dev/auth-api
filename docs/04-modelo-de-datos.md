@@ -1,6 +1,6 @@
 # 04 · Modelo de Datos — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas).
+**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento.
 **Fuente**: doc 00 → ítems 15 (timestamps), 30-33 (SQLite/Drizzle/migraciones), 35 (argon2id), 38 (refresh hasheado + jti), 42 (logout), 44-47 (Google OIDC, `users` nullable); historias US-01, US-03, US-04, US-07, US-08; diagramas 3-4 del doc 02.
 **Cómo leer**: cada tabla traza columna a columna su origen en la sección [Trazabilidad](#trazabilidad-columna--fuente). Las decisiones que el modelo toma más allá de la literalidad del plan están explicadas en [Decisiones derivadas](#decisiones-derivadas).
 
@@ -37,6 +37,7 @@ erDiagram
         text id PK "UUID v4"
         text token_hash UK "SHA-256 del enlace opaco"
         text email "destinatario (normalizado)"
+        text purpose "login · password_reset (US-12)"
         text status "pending · used · revoked"
         text expires_at "ISO 8601 UTC · TTL corto (15 min default)"
         text created_at "ISO 8601 UTC"
@@ -73,11 +74,12 @@ CREATE TABLE refresh_tokens (
   FOREIGN KEY (family_id) REFERENCES users(id)
 ) STRICT;
 
--- magic_links: enlaces de acceso sin contraseña (US-09/US-10)
+-- magic_links: enlaces de acceso sin contraseña (US-09/US-10) y de recuperación (US-12)
 CREATE TABLE magic_links (
   id         TEXT PRIMARY KEY,                                    -- UUID v4 (VOs: MagicLinkId)
   token_hash TEXT NOT NULL UNIQUE,                                -- SHA-256 del enlace opaco
   email      TEXT NOT NULL,                                       -- destinatario normalizado (VOs: Email)
+  purpose    TEXT NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'password_reset')), -- canal del enlace (VOs: MagicLinkPurpose)
   status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')),
   expires_at TEXT NOT NULL,                                       -- TTL corto: 15 min default (MAGIC_LINK_TTL_MINUTES)
   created_at TEXT NOT NULL                                        -- ISO 8601 UTC
@@ -136,6 +138,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `id` | convención `id UUID v4` (doc 00 → nº 45) aplicada a los enlaces |
 | `token_hash` | US-09 AC-03 (persistir solo el **hash** SHA-256 del enlace opaco). **UNIQUE** derivado: `findByTokenHash(sha256(token))` debe resolver un único enlace (diagrama magic link) |
 | `email` | US-09 AC-01 (destinatario; el enlace se emite para un email conocido por el servidor tras generar el token) |
+| `purpose` | US-12 (canal de recuperación) sobre el canal US-09/10: `intent` del request → `purpose` persistido (doc 00 → nº 56); `DEFAULT 'login'` conserva el comportamiento US-09/10 y hace retrocompatible la migración 0002. **F3**: el consumo de sesión solo acepta `login` y el reset solo `password_reset` |
 | `status` | US-10 AC-04 (`used` tras un consumo → un solo uso); `revoked` reservado para revocación manual futura; `pending` inicial. Un único enum evita estados imposibles (mismo racional que `refresh_tokens.status`, decisión 3) |
 | `expires_at` | US-09 AC-04 (TTL corto, default 15 min; vencido → `MAGIC_LINK_INVALID`, US-10 AC-05) |
 | `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD) |
@@ -153,6 +156,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | 5 | **CHECK de identidad `users` ampliado** a `... OR email_verified = 1` | Un usuario solo-magic (creado por auto-cuenta en US-10 AC-02) no tiene `password_hash` ni `google_sub`; su email ya está verificado por posesión. Sin la ampliación, la CHECK original `(password_hash IS NOT NULL OR google_sub IS NOT NULL)` impediría persistir el alta implícita |
 | 6 | **`provider = 'magic'` en refresh_tokens y CHECK ampliado** | Las sesiones emitidas al consumir un magic link (US-10 AC-01) usan nuestros refresh (doc 00 → nº 47); `provider` informa su origen. La CHECK pasa de `('local','google')` a `('local','google','magic')` |
 | 7 | **`magic_links.status` único** (`pending`/`used`/`revoked`) sin flags | Mismo racional que la decisión 1 aplicado a los enlaces: un solo consumo (`used`) marca el fin de la vida útil; `revoked` queda reservado para revocación proactiva futura |
+| 8 | **`magic_links.purpose`** (`login`/`password_reset`, default `'login'`) | Separa los canales `login` (US-09/10) y `password_reset` (US-12) sobre la misma tabla: un enum (no un flag) impide estados imposibles y `DEFAULT 'login'` hace retrocompatible la migración 0002 (las filas copiadas heredan el canal de sesión). Refuerza **F3**: un enlace de un canal no funciona en el otro (consume solo `login`, reset solo `password_reset`) |
 
 ---
 
@@ -173,5 +177,5 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 
 - Drizzle define el mismo esquema 1:1 (doc 00 → nº 30-33); `better-sqlite3` con `foreign_keys = ON` y WAL.
 - Tipos nativos: `TEXT` para UUID/ISO-8601/JTI y `INTEGER` para `email_verified` (SQLite no distingue más; los VOs del dominio (doc 02 → diagrama 6) validan la semántica en la frontera).
-- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`.
+- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`, `MagicLinkPurpose → magic_links.purpose`.
 - Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por refresh token_hash y por magic token_hash — únicos ya indexados; por user_id, family_id, magic email y magic status en índices separados).

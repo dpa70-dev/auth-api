@@ -164,6 +164,9 @@ export interface paths {
          *     **hash SHA-256** del token opaco (≥ 32 bytes aleatorios), nunca el token en claro. El enlace
          *     expira en un TTL corto configurable (`MAGIC_LINK_TTL_MINUTES`, default 15, máx 60). La auto-cuenta
          *     se resuelve en el consume (US-10 AC-02): un link enviado a un email no registrado crea la cuenta.
+         *     El campo `intent` selecciona el canal (US-11/12): `login` (default) envía la URL de consumo de
+         *     sesión; `password_reset` envía la URL de recuperación de contraseña con la MISMA forma de respuesta
+         *     y la MISMA cantidad de trabajo (anti-enumeración también en el canal de recuperación).
          */
         post: operations["requestMagicLink"];
         delete?: never;
@@ -189,8 +192,62 @@ export interface paths {
          *     y se responde 200. Si ya está registrado (local/Google), se marca `email_verified = 1` y se emite
          *     sesión sobre la cuenta existente. **Un solo uso**: el token se marca `used` al consumirse. Token
          *     inexistente, revocado o vencido → 401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+         *     El consumo de sesión solo acepta enlaces `purpose = 'login'`: un enlace de recuperación
+         *     (`password_reset`) presentado aquí responde el mismo 401 idéntico (US-12 F3).
          */
         post: operations["consumeMagicLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar contraseña (usuario autenticado)
+         * @description Reemplaza la contraseña del usuario autenticado probando la actual (US-11). Requiere access
+         *     token (Bearer). La contraseña actual incorrecta → 401 `INVALID_CREDENTIALS` genérico (misma
+         *     semántica que /login, anti-enumeración). Cuenta sin contraseña configurada (solo-Google o
+         *     solo-magic) → 409 `ACCOUNT_HAS_NO_PASSWORD`. **F1**: el cambio revoca TODAS las sesiones del
+         *     usuario (`revokeFamily`) — compensa sesiones emitidas bajo el secreto viejo; el cliente
+         *     re-autentica. El access vigente no se revoca explícitamente: expira solo por su corta vida
+         *     (5-15 min), comportamiento esperado.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recuperar contraseña (consumo del magic link de reset)
+         * @description Consume un magic link emitido con `intent: password_reset` y reemplaza (o asigna) la
+         *     contraseña del email del enlace (US-12). El token ES la credencial: la ruta solo lleva
+         *     `authLimiter` (sin requireAuth). **NO emite sesión** — respuesta `204`; el cliente redirige
+         *     al login con el secreto nuevo. **F2**: email aún no registrado → auto-cuenta local (el enlace
+         *     prueba la posesión del email, coherente con US-10 AC-02). **F1**: el reset revoca TODAS las
+         *     sesiones del usuario. Token inexistente, vencido, ya usado o de otro propósito (`login`) →
+         *     401 `MAGIC_LINK_INVALID`, idéntico en forma (anti-enumeración).
+         */
+        post: operations["resetPassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -216,6 +273,14 @@ export interface components {
             email: components["schemas"]["Email"];
             password: components["schemas"]["Password"];
         };
+        ChangePasswordRequest: {
+            currentPassword: components["schemas"]["Password"];
+            newPassword: components["schemas"]["Password"];
+        };
+        PasswordResetRequest: {
+            token: components["schemas"]["MagicLinkToken"];
+            password: components["schemas"]["Password"];
+        };
         RefreshRequest: {
             refreshToken: components["schemas"]["RefreshToken"];
         };
@@ -234,8 +299,17 @@ export interface components {
              */
             nonce?: string;
         };
+        /**
+         * @description Canal del magic link (US-09/10 vs US-12). `login` (default) → enlace de acceso con sesión;
+         *     `password_reset` → enlace de recuperación de contraseña (misma forma de respuesta y mismo
+         *     trabajo realizado — anti-enumeración también en el reset). Se persiste en `magic_links.purpose`.
+         * @example login
+         * @enum {string}
+         */
+        MagicLinkIntent: "login" | "password_reset";
         MagicLinkRequest: {
             email: components["schemas"]["Email"];
+            intent?: components["schemas"]["MagicLinkIntent"];
         };
         MagicLinkRequestResponse: {
             data: {
@@ -315,13 +389,13 @@ export interface components {
                 /**
                  * @description Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                  *     documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID y RATE_LIMITED;
-                 *     UNAUTHORIZED y MALFORMED_REQUEST completan la matriz 401/400; NOT_FOUND y
-                 *     METHOD_NOT_ALLOWED cubren el 404/405 centralizado (doc 00 → ítem 24); INTERNAL_ERROR
-                 *     para 500.
+                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID,
+                 *     ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; UNAUTHORIZED y MALFORMED_REQUEST completan la
+                 *     matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405 centralizado
+                 *     (doc 00 → ítem 24); INTERNAL_ERROR para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "RATE_LIMITED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */
@@ -650,6 +724,88 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             /** @description Token inexistente, revocado o vencido — forma idéntica (anti-enumeración). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Contraseña actualizada y todas las sesiones revocadas (US-11 AC-01/AC-02). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /**
+             * @description No autenticado (token ausente/vencido/malformado/firma no verificada, `UNAUTHORIZED`) o
+             *     contraseña actual incorrecta (`INVALID_CREDENTIALS`).
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description La cuenta no tiene contraseña configurada (solo-Google o solo-magic). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Contraseña reemplazada/asignada y sesiones revocadas; sin sesión emitida (US-12 AC-01/AC-02). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Token inexistente, vencido, ya usado o de otro propósito — forma idéntica (anti-enumeración). */
             401: {
                 headers: {
                     [name: string]: unknown;
