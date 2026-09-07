@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import 'dotenv/config';
 
+/** Prefijo de montaje de la API (doc 00 → nº 56): fuente única para el mount en index.ts y los links de email. */
+export const API_PREFIX = '/api/v1';
+
 // Esquema de las variables de entorno: valida, aplica defaults y transforma al shape limpio.
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -42,43 +45,51 @@ const envSchema = z.object({
   RATE_LIMIT_AUTH_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
 
-  // Magic link (doc 05 → magic link): TTL en minutos, base pública del consumo de acceso y
-  // base pública del consumo de reset de contraseña (US-12, pantalla distinta en el frontend).
+  // Magic link (doc 05 → magic link): TTL en minutos y origin público de la API (doc 00 → nº 56).
+  // Los emails componen sus URLs con origin + API_PREFIX + path — el env solo declara el origin
+  // (lo que varía por entorno); jamás se deriva del Host header del request (anti-poisoning).
   MAGIC_LINK_TTL_MINUTES: z.coerce.number().int().positive().max(60).default(15),
-  MAGIC_LINK_CONSUME_BASE_URL: z
-    .url()
-    .default('http://localhost:3000/api/v1/auth/magic-link/consume'),
-  MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL: z
-    .url()
-    .default('http://localhost:3000/api/v1/auth/password/reset'),
+  // Origin público (esquema+host, sin path) de la API para los enlaces de email. Opcional:
+  // vacío o ausente → default dev HOST:PORT (config de confianza en boot, no el Host header).
+  PUBLIC_API_ORIGIN: z
+    .string()
+    .optional()
+    .transform((s) => (s && s.trim() !== '' ? s.trim() : undefined))
+    .pipe(z.url().optional())
+    .transform((s) => (s ? s.replace(/\/+$/, '') : undefined)),
 })
   // Transforma el objeto completo a la estructura limpia de la API (fuente única del shape).
-  .transform((data) => ({
-    nodeEnv: data.NODE_ENV,
-    port: data.PORT,
-    host: data.HOST,
-    jwtSecret: data.JWT_SECRET,
-    accessTtlMinutes: data.ACCESS_TTL_MINUTES,
-    refreshTtlDays: data.REFRESH_TTL_DAYS,
-    google: {
-      ...(data.GOOGLE_CLIENT_ID ? { clientId: data.GOOGLE_CLIENT_ID } : {}),
-      issuer: data.GOOGLE_ISSUER,
-      jwksUrl: data.GOOGLE_JWKS_URL,
-    },
-    dbPath: data.DB_PATH,
-    corsOrigins: data.CORS_ORIGINS,
-    rateLimit: {
-      windowMs: data.RATE_LIMIT_WINDOW_MS,
-      max: data.RATE_LIMIT_MAX,
-      authWindowMs: data.RATE_LIMIT_AUTH_WINDOW_MS,
-      authMax: data.RATE_LIMIT_AUTH_MAX,
-    },
-    magicLink: {
-      ttlMinutes: data.MAGIC_LINK_TTL_MINUTES,
-      consumeBaseUrl: data.MAGIC_LINK_CONSUME_BASE_URL,
-      passwordResetConsumeBaseUrl: data.MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL,
-    },
-  }));
+  .transform((data) => {
+    // Origin público para los emails: PUBLIC_API_ORIGIN si está seteado (prod); si no, deriva
+    // de HOST:PORT en dev. Config de confianza evaluada en boot — nunca el Host header del request.
+    const apiOrigin: string = data.PUBLIC_API_ORIGIN ?? `http://${data.HOST}:${data.PORT}`;
+    return {
+      nodeEnv: data.NODE_ENV,
+      port: data.PORT,
+      host: data.HOST,
+      jwtSecret: data.JWT_SECRET,
+      accessTtlMinutes: data.ACCESS_TTL_MINUTES,
+      refreshTtlDays: data.REFRESH_TTL_DAYS,
+      google: {
+        ...(data.GOOGLE_CLIENT_ID ? { clientId: data.GOOGLE_CLIENT_ID } : {}),
+        issuer: data.GOOGLE_ISSUER,
+        jwksUrl: data.GOOGLE_JWKS_URL,
+      },
+      dbPath: data.DB_PATH,
+      corsOrigins: data.CORS_ORIGINS,
+      rateLimit: {
+        windowMs: data.RATE_LIMIT_WINDOW_MS,
+        max: data.RATE_LIMIT_MAX,
+        authWindowMs: data.RATE_LIMIT_AUTH_WINDOW_MS,
+        authMax: data.RATE_LIMIT_AUTH_MAX,
+      },
+      magicLink: {
+        ttlMinutes: data.MAGIC_LINK_TTL_MINUTES,
+        consumeBaseUrl: `${apiOrigin}${API_PREFIX}/auth/magic-link/consume`,
+        passwordResetConsumeBaseUrl: `${apiOrigin}${API_PREFIX}/auth/password/reset`,
+      },
+    };
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

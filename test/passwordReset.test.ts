@@ -101,7 +101,7 @@ describe('US-12 — solicitud de reset (intent=password_reset)', () => {
     const res = await requestReset(ctx.baseUrl, 'reset@example.com');
     expect(res.status).toBe(200);
     expect((await readJson<{ data: { ok: boolean } }>(res)).data.ok).toBe(true);
-    // El canal login NO recibe nada; el reset SÍ, con la base configurada MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL.
+    // El canal login NO recibe nada; el reset SÍ, con la base configurada (config.magicLink.passwordResetConsumeBaseUrl).
     expect(sender.sent).toHaveLength(0);
     expect(sender.sentReset).toHaveLength(1);
     expect(sender.sentReset[0]!.to).toBe('reset@example.com');

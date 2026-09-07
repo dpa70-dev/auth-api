@@ -336,14 +336,14 @@ Notas:
 - **Hash, no claro (US-09 AC-03)**: la BD guarda solo `sha256(rawToken)`; un leak de `magic_links` no expone enlaces utilizables.
 - **Un solo uso (US-10 AC-04)**: `markUsed` se ejecuta sobre el hash; reusar el token → 401 `MAGIC_LINK_INVALID` idéntico a inexistente/vencido (anti-enumeración).
 - El email verificado del consume (auto-cuenta o `markEmailVerified`) habilita el CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5).
-- **Intento y propósito (US-12)**: `intent` del request (default `'login'`) se persiste como `purpose`; la URL de consumo la resuelve el handler según el intent (`MAGIC_LINK_CONSUME_BASE_URL` vs `MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL`, doc 00 → nº 56). **F3**: un enlace de `password_reset` presentado en el consume de sesión responde el mismo 401 idéntico.
+- **Intento y propósito (US-12)**: `intent` del request (default `'login'`) se persiste como `purpose`; la URL de consumo la resuelve el handler según el intent (base pública = `PUBLIC_API_ORIGIN` + `API_PREFIX`, doc 00 → nº 56; origin configurado, no derivado del Host header). **F3**: un enlace de `password_reset` presentado en el consume de sesión responde el mismo 401 idéntico.
 
 ---
 
 ### 6.1 Recuperación de contraseña — US-12
 
-Mismo canal del diagrama 6 con `intent: 'password_reset'`: el enlace se envía contra
-`MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL` y se persiste con `purpose = 'password_reset'`.
+Mismo canal del diagrama 6 con `intent: 'password_reset'`: el enlace se envía con base
+`PUBLIC_API_ORIGIN` + `API_PREFIX` (ruta `POST /auth/password/reset`) y se persiste con `purpose = 'password_reset'`.
 
 ```mermaid
 sequenceDiagram

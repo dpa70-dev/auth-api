@@ -102,7 +102,7 @@ Definido en `vo/refreshTokenStatus.ts` como `z.enum(['active', 'used', 'revoked'
 | **Auto-cuenta (US-10)** | Si un magic link se consume con un email no registrado, el sistema crea la cuenta automáticamente al validar el enlace. La posesión del email es la verificación. |
 | **Anti-enumeración** | Propiedad de seguridad: el sistema responde de forma idéntica y realiza la misma cantidad de trabajo (generar token, hash, persistir, intentar enviar) independientemente de si el email está registrado. Un atacante no puede distinguir por tiempo de respuesta ni por el body de la respuesta. |
 | **MagicLinkStatus** | Estados: `"pending"` (recién creado), `"used"` (ya consumido), `"revoked"` (invalidado). Definido en `vo/magicLinkStatus.ts`. |
-| **consumeBaseUrl** | URL base pública del endpoint de consumo. Se construye la URL completa: `${consumeBaseUrl}?token=${rawToken}`. |
+| **consumeBaseUrl** | URL de consumo compuesta en `config.ts`: `${origin}${API_PREFIX}/auth/magic-link/consume` (origin = `PUBLIC_API_ORIGIN` o `HOST:PORT` en dev). El token se agrega: `${consumeBaseUrl}?token=${rawToken}`. |
 
 ---
 

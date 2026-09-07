@@ -208,7 +208,7 @@
 
 **Criterios de aceptación:**
 
-- **AC-01** — Dado un email válido, cuando hago `POST /auth/magic-link/request` con `{ email, intent: 'password_reset' }`, entonces obtengo `200 { data: { ok: true } }` **idéntico** exista o no el email (anti-enumeración: misma forma y misma cantidad de trabajo que US-09), y se envía un email con la URL `MAGIC_LINK_PASSWORD_RESET_CONSUME_BASE_URL?token=<opaco>`.
+- **AC-01** — Dado un email válido, cuando hago `POST /auth/magic-link/request` con `{ email, intent: 'password_reset' }`, entonces obtengo `200 { data: { ok: true } }` **idéntico** exista o no el email (anti-enumeración: misma forma y misma cantidad de trabajo que US-09), y se envía un email con la URL `{origin público}/api/v1/auth/password/reset?token=<opaco>` (origin = `PUBLIC_API_ORIGIN` si está seteado, si no `HOST:PORT`; el path lo compone `API_PREFIX` en config).
 - **AC-02** — Con ese token (no vencido, `purpose = 'password_reset'`), cuando hago `POST /auth/password/reset` con `{ token, password }`, entonces obtengo `204 No Content`. **NO se emite sesión**: el cliente redirige al login con el secreto nuevo.
 - **AC-03** — **F1**: el reset revoca TODAS las sesiones del usuario (misma política que US-11 AC-02).
 - **AC-04** — **F2**: email aún no registrado → se crea una auto-cuenta local (`email_verified = 1`, el enlace prueba la posesión del email, coherente con US-10 AC-02) y se asigna la contraseña; el usuario puede loguear de inmediato.

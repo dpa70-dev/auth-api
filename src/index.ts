@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { pinoHttp } from 'pino-http';
 
-import { config } from './config.js';
+import { API_PREFIX, config } from './config.js';
 import { LOG_EVENTS } from './domain/port/index.js';
 import { composeInfra, type ComposeOverrides } from './infra/compose.js';
 import { buildUseCases } from './app/buildUseCases.js';
@@ -32,8 +32,8 @@ export const buildApp = (overrides: AppDeps = {}) => {
 
   app.use(express.json({ limit: '16kb' }));
 
-  app.use('/api/v1', apiRouter(useCases, { tokens, config }));
-  app.use('/api/v1', notFound);
+  app.use(API_PREFIX, apiRouter(useCases, { tokens, config }));
+  app.use(API_PREFIX, notFound);
   app.use(finalErrorHandler);
 
   return { app, close };
@@ -43,7 +43,7 @@ if (config.nodeEnv !== 'test') {
   const { app, close } = buildApp();
   const bootLogger = new PinoLogger(config.nodeEnv);
   const server = app.listen(config.port, config.host, () => {
-    bootLogger.info(LOG_EVENTS.API_LISTENING, { url: `http://${config.host}:${config.port}/api/v1`, env: config.nodeEnv });
+    bootLogger.info(LOG_EVENTS.API_LISTENING, { url: `http://${config.host}:${config.port}${API_PREFIX}`, env: config.nodeEnv });
   });
 
   const shutdown = (signal: string) => {
