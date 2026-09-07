@@ -8,6 +8,12 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import {
+  magicLinkPurposeValues,
+  magicLinkStatusValues,
+  providerValues,
+  refreshTokenStatusValues,
+} from '../domain/vo/index.js';
 
 /**
  * Schema 1:1 con docs/04-modelo-de-datos.md (ERD + DDL aprobados en fase 2).
@@ -44,8 +50,8 @@ export const refreshTokens = sqliteTable(
     tokenHash: text('token_hash').notNull(),
     userId: text('user_id').notNull(),
     familyId: text('family_id').notNull(),
-    status: text('status', { enum: ['active', 'used', 'revoked'] }).notNull().default('active'),
-    provider: text('provider', { enum: ['local', 'google', 'magic'] }),
+    status: text('status', { enum: refreshTokenStatusValues }).notNull().default('active'),
+    provider: text('provider', { enum: providerValues }),
     expiresAt: text('expires_at').notNull(),
     createdAt: text('created_at').notNull(),
   },
@@ -70,8 +76,8 @@ export const magicLinks = sqliteTable(
     tokenHash: text('token_hash').notNull(),
     email: text('email').notNull(),
     // purpose: login (US-09/10) o password_reset (US-12); 1:1 con el VO magicLinkPurpose.
-    purpose: text('purpose', { enum: ['login', 'password_reset'] }).notNull().default('login'),
-    status: text('status', { enum: ['pending', 'used', 'revoked'] }).notNull().default('pending'),
+    purpose: text('purpose', { enum: magicLinkPurposeValues }).notNull().default('login'),
+    status: text('status', { enum: magicLinkStatusValues }).notNull().default('pending'),
     expiresAt: text('expires_at').notNull(),
     createdAt: text('created_at').notNull(),
   },

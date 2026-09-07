@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { userIdSchema, type PlainPassword } from '../../domain/vo/index.js';
+import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, type PlainPassword } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type ResetPasswordCommand = {
@@ -34,7 +34,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     // 401 idéntico para todo fallo (anti-enumeración + anti-reuso, patrón consume):
     // inexistente, no pendiente (ya usado/revocado), vencido o de otro propósito (login).
     if (!found) throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
-    if (found.status !== 'pending') {
+    if (found.status !== magicLinkStatusSchema.enum.pending) {
       this.logger.warn(LOG_EVENTS.PASSWORD_RESET_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }
@@ -43,7 +43,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }
     // F3 (aprobado): un link de login no restablece contraseña; el reset solo acepta purpose='password_reset'.
-    if (found.purpose !== 'password_reset') {
+    if (found.purpose !== magicLinkPurposeSchema.enum.password_reset) {
       this.logger.warn(LOG_EVENTS.PASSWORD_RESET_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }

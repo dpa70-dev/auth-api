@@ -3,6 +3,7 @@ import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { isRefreshExpired } from '../../domain/refreshExpiry.js';
+import { refreshTokenStatusSchema } from '../../domain/vo/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -33,7 +34,7 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
 
     // AC-04: inexistente, vencido o revocado → 401 genérico idéntico (nunca revelar la causa).
     if (!found) throw new ApiError(ErrorCodes.UNAUTHORIZED);
-    if (found.status === 'revoked' || found.status === 'used') {
+    if (found.status === refreshTokenStatusSchema.enum.revoked || found.status === refreshTokenStatusSchema.enum.used) {
       // REUSO (AC-03): el mismo refresh presentado dos veces → 401 idéntico Y revocar toda la familia.
       await this.users.revokeFamily(found.userId);
       this.logger.warn(LOG_EVENTS.REFRESH_REUSE_DETECTED, { userId: found.userId, jti: found.jti });

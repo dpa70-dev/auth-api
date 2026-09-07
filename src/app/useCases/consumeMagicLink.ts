@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, MagicLinkRepository, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -35,7 +35,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
     // 401 idéntico para todo fallo (anti-enumeración + anti-reuso, patrón del refresh):
     // inexistente, no pendiente (ya usado/revocado) o vencido — nunca revelar la causa.
     if (!found) throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
-    if (found.status !== 'pending') {
+    if (found.status !== magicLinkStatusSchema.enum.pending) {
       this.logger.warn(LOG_EVENTS.MAGIC_LINK_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }
@@ -45,7 +45,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
     }
     // F3 (aprobado): un link de reset no crea sesiones. El consumo de login solo acepta purpose='login'
     // — un link de password_reset presentado aquí es tan inválido como un token desconocido.
-    if (found.purpose !== 'login') {
+    if (found.purpose !== magicLinkPurposeSchema.enum.login) {
       this.logger.warn(LOG_EVENTS.MAGIC_LINK_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }

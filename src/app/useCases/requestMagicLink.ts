@@ -6,7 +6,7 @@ import type {
   TokenIssuer,
 } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import type { Email, MagicLinkPurpose } from '../../domain/vo/index.js';
+import { magicLinkPurposeSchema, type Email, type MagicLinkPurpose } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type RequestMagicLinkCommand = {
@@ -52,7 +52,7 @@ export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, Reques
       expiresAt,
     });
     const url = `${cmd.consumeBaseUrl}?token=${rawToken}`;
-    if (cmd.intent === 'password_reset') {
+    if (cmd.intent === magicLinkPurposeSchema.enum.password_reset) {
       await this.sender.sendPasswordResetEmail({ to: cmd.email, url });
       this.logger.info(LOG_EVENTS.PASSWORD_RESET_REQUESTED, { email: cmd.email, ttlMinutes: cmd.magicLinkTtlMinutes, expiresAt });
     } else {
