@@ -20,9 +20,9 @@ export const requireAuth = (tokens: TokenIssuer): RequestHandler => {
   return async (req, _res, next) => {
     try {
       const header = req.headers.authorization;
-      if (!header?.startsWith('Bearer ')) throw unauth();
+      if (!header?.startsWith(BEARER_PREFIX)) throw unauth();
 
-      const payload = await tokens.verifyAccessToken(header.slice('Bearer '.length));
+      const payload = await tokens.verifyAccessToken(header.slice(BEARER_PREFIX.length));
       if (!payload) throw unauth();
 
       // Un sub no-UUID en un token firmado es un token malformado → 401, nunca 422 (US-05).
@@ -35,5 +35,8 @@ export const requireAuth = (tokens: TokenIssuer): RequestHandler => {
     }
   };
 };
+
+/** Prefijo del header Authorization (doc 03): fuente única de 'Bearer ' para startsWith y slice. */
+const BEARER_PREFIX = 'Bearer ';
 
 const unauth = () => new ApiError(ErrorCodes.UNAUTHORIZED);

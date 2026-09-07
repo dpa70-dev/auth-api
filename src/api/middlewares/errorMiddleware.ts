@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import type { ErrorBody } from '../protocol/envelope.js';
 import type { ErrorCode, ValidationIssue } from '../../domain/errorCatalog.js';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from '../protocol/errorKinds.js';
+import { generateRequestId } from './middleware.js';
 import { ApiError, isApiError } from '../../domain/apiError.js';
 import { ERROR_MESSAGES, ErrorCodes } from '../../domain/errorCatalog.js';
 
@@ -58,7 +58,7 @@ export const finalErrorHandler = (
   res: Response,
   _next: NextFunction,
 ): void => {
-  const requestId = req.requestId ?? `req_${randomUUID()}`;
+  const requestId = req.requestId ?? generateRequestId();
 
   if (isMethodNotAllowed(err)) {
     writeError(res, STATUS_BY_CODE[ErrorCodes.METHOD_NOT_ALLOWED], { code: ErrorCodes.METHOD_NOT_ALLOWED, message: ERROR_MESSAGES[ErrorCodes.METHOD_NOT_ALLOWED], requestId });
