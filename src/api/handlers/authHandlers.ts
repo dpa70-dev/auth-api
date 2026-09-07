@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { UseCases } from '../../app/buildUseCases.js';
 import { changePasswordRequest, credentialsRequest, googleRequest, refreshRequest } from './schemas.js';
-import { sendData } from '../protocol/success.js';
+import { writeSuccess } from '../protocol/success.js';
 import type { ApiDeps } from '../deps.js';
 
 /** Handlers de credenciales (local) y Google. Cada uno es un cierre sobre (useCases, deps). */
@@ -16,7 +16,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      sendData(res, 201, result);
+      writeSuccess(res, 201, result);
     } catch (err) {
       next(err);
     }
@@ -30,7 +30,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      sendData(res, 200, result);
+      writeSuccess(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -43,7 +43,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshToken: body.refreshToken,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      sendData(res, 200, result);
+      writeSuccess(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -53,7 +53,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
     try {
       const body = refreshRequest.parse(req.body);
       await useCases.logout.execute({ refreshToken: body.refreshToken });
-      sendData(res, 204, null);
+      writeSuccess(res, 204, null);
     } catch (err) {
       next(err);
     }
@@ -70,7 +70,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         currentPassword: body.currentPassword,
         newPassword: body.newPassword,
       });
-      sendData(res, 204, null);
+      writeSuccess(res, 204, null);
     } catch (err) {
       next(err);
     }
@@ -87,7 +87,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         ...(body.nonce !== undefined ? { nonce: body.nonce } : {}),
         refreshTtlDays: deps.config.refreshTtlDays,
       });
-      sendData(res, 200, result);
+      writeSuccess(res, 200, result);
     } catch (err) {
       next(err);
     }
