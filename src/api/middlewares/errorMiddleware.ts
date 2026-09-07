@@ -10,8 +10,9 @@ import { ERROR_MESSAGES, ErrorCodes } from '../../domain/errorCatalog.js';
 /**
  * Traducción code→status HTTP del contrato (doc 03 → responses de cada endpoint).
  * El dominio nunca conoce HTTP: esta es la ÚNICA frontera que mapea códigos a status.
+ * Record exhaustivo: agregar un código al catálogo sin status aquí falla en compilación.
  */
-const STATUS_BY_CODE: Record<ErrorCode, number> = {
+export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   [ErrorCodes.VALIDATION_ERROR]: 422,
   [ErrorCodes.INVALID_CREDENTIALS]: 401,
   [ErrorCodes.EMAIL_ALREADY_EXISTS]: 409,
@@ -60,7 +61,7 @@ export const finalErrorHandler = (
   const requestId = req.requestId ?? `req_${randomUUID()}`;
 
   if (isMethodNotAllowed(err)) {
-    writeError(res, 405, { code: ErrorCodes.METHOD_NOT_ALLOWED, message: ERROR_MESSAGES[ErrorCodes.METHOD_NOT_ALLOWED], requestId });
+    writeError(res, STATUS_BY_CODE[ErrorCodes.METHOD_NOT_ALLOWED], { code: ErrorCodes.METHOD_NOT_ALLOWED, message: ERROR_MESSAGES[ErrorCodes.METHOD_NOT_ALLOWED], requestId });
     return;
   }
   // body-parser (express.json): JSON inválido o payload excedido → 400 MALFORMED_REQUEST del contrato.

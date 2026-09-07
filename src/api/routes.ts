@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from './protocol/errorKinds.js';
 import { requireAuth } from './middlewares/authMiddleware.js';
+import { STATUS_BY_CODE } from './middlewares/errorMiddleware.js';
 import { ERROR_MESSAGES, ErrorCodes } from '../domain/errorCatalog.js';
 import type { UseCases } from '../app/buildUseCases.js';
 import { buildHandlers } from './buildHandlers.js';
@@ -17,7 +18,7 @@ const authLimiter = (config: Config) =>
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (req, res) => {
-      res.status(429).set('Retry-After', String(config.rateLimit.authWindowMs / 1000)).json({
+      res.status(STATUS_BY_CODE[ErrorCodes.RATE_LIMITED]).set('Retry-After', String(config.rateLimit.authWindowMs / 1000)).json({
         error: {
           code: ErrorCodes.RATE_LIMITED,
           message: ERROR_MESSAGES[ErrorCodes.RATE_LIMITED],
