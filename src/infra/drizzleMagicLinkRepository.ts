@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import type { MagicLinkRecord, MagicLinkRepository } from '../domain/port/index.js';
 import { magicLinks } from '../db/schema.js';
 import type { Email, MagicLinkPurpose, MagicLinkStatus, Timestamp } from '../domain/vo/index.js';
+import { magicLinkStatusSchema } from '../domain/vo/index.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 
@@ -30,7 +31,7 @@ export class DrizzleMagicLinkRepository implements MagicLinkRepository {
       tokenHash: input.tokenHash,
       email: input.email,
       purpose: input.purpose,
-      status: 'pending',
+      status: magicLinkStatusSchema.enum.pending,
       expiresAt: input.expiresAt,
       createdAt: new Date().toISOString(),
     }).run();
@@ -42,14 +43,14 @@ export class DrizzleMagicLinkRepository implements MagicLinkRepository {
   }
 
   async markUsed(tokenHash: string): Promise<void> {
-    this.db.update(magicLinks).set({ status: 'used' }).where(eq(magicLinks.tokenHash, tokenHash)).run();
+    this.db.update(magicLinks).set({ status: magicLinkStatusSchema.enum.used }).where(eq(magicLinks.tokenHash, tokenHash)).run();
   }
 
   async revokeAllForEmail(email: Email): Promise<void> {
     this.db
       .update(magicLinks)
-      .set({ status: 'revoked' })
-      .where(and(eq(magicLinks.email, email), eq(magicLinks.status, 'pending')))
+      .set({ status: magicLinkStatusSchema.enum.revoked })
+      .where(and(eq(magicLinks.email, email), eq(magicLinks.status, magicLinkStatusSchema.enum.pending)))
       .run();
   }
 }

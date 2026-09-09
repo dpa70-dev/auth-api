@@ -9,11 +9,22 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import {
+  magicLinkPurposeSchema,
   magicLinkPurposeValues,
+  magicLinkStatusSchema,
   magicLinkStatusValues,
   providerValues,
+  refreshTokenStatusSchema,
   refreshTokenStatusValues,
 } from '../domain/vo/index.js';
+
+/**
+ * Serie 'a', 'b' para CHECKs IN (...) — derivada en compilación del array fuente única.
+ * Los values son literales const del dominio (no input): sql.raw es seguro acá.
+ */
+const inList = (values: readonly string[]): ReturnType<typeof sql.raw> =>
+  // join sin espacio: reproduce byte-a-byte el SQL de las migraciones previas (snapshot estable).
+  sql.raw(values.map((v) => `'${v}'`).join(','));
 
 /**
  * Schema 1:1 con docs/04-modelo-de-datos.md (ERD + DDL aprobados en fase 2).
@@ -50,7 +61,7 @@ export const refreshTokens = sqliteTable(
     tokenHash: text('token_hash').notNull(),
     userId: text('user_id').notNull(),
     familyId: text('family_id').notNull(),
-    status: text('status', { enum: refreshTokenStatusValues }).notNull().default('active'),
+    status: text('status', { enum: refreshTokenStatusValues }).notNull().default(refreshTokenStatusSchema.enum.active),
     provider: text('provider', { enum: providerValues }),
     expiresAt: text('expires_at').notNull(),
     createdAt: text('created_at').notNull(),
@@ -59,10 +70,10 @@ export const refreshTokens = sqliteTable(
     uniqueIndex('refresh_tokens_token_hash_unique').on(t.tokenHash),
     index('refresh_tokens_user_id_idx').on(t.userId),
     index('refresh_tokens_family_id_idx').on(t.familyId),
-    // doc 04 → refresh_tokens: CHECK (status IN ('active','used','revoked'))
-    check('refresh_tokens_status_check', sql`${t.status} IN ('active','used','revoked')`),
-    // doc 04 → refresh_tokens: CHECK (provider IN ('local','google','magic'))
-    check('refresh_tokens_provider_check', sql`${t.provider} IN ('local','google','magic')`),
+    // doc 04 → refresh_tokens: CHECK derivado de refreshTokenStatusValues
+    check('refresh_tokens_status_check', sql`${t.status} IN (${inList(refreshTokenStatusValues)})`),
+    // doc 04 → refresh_tokens: CHECK derivado de providerValues
+    check('refresh_tokens_provider_check', sql`${t.provider} IN (${inList(providerValues)})`),
     // FK user_id y family_id → users.id (doc 04 → FK explícitas)
     foreignKey({ columns: [t.userId], foreignColumns: [users.id] }).onDelete('cascade'),
     foreignKey({ columns: [t.familyId], foreignColumns: [users.id] }).onDelete('cascade'),
@@ -76,8 +87,8 @@ export const magicLinks = sqliteTable(
     tokenHash: text('token_hash').notNull(),
     email: text('email').notNull(),
     // purpose: login (US-09/10) o password_reset (US-12); 1:1 con el VO magicLinkPurpose.
-    purpose: text('purpose', { enum: magicLinkPurposeValues }).notNull().default('login'),
-    status: text('status', { enum: magicLinkStatusValues }).notNull().default('pending'),
+    purpose: text('purpose', { enum: magicLinkPurposeValues }).notNull().default(magicLinkPurposeSchema.enum.login),
+    status: text('status', { enum: magicLinkStatusValues }).notNull().default(magicLinkStatusSchema.enum.pending),
     expiresAt: text('expires_at').notNull(),
     createdAt: text('created_at').notNull(),
   },
@@ -85,9 +96,9 @@ export const magicLinks = sqliteTable(
     uniqueIndex('magic_links_token_hash_unique').on(t.tokenHash),
     index('magic_links_email_idx').on(t.email),
     index('magic_links_status_idx').on(t.status),
-    // doc 04 → magic_links: CHECK (status IN ('pending','used','revoked'))
-    check('magic_links_status_check', sql`${t.status} IN ('pending','used','revoked')`),
-    // doc 04 → magic_links: CHECK (purpose IN ('login','password_reset'))
-    check('magic_links_purpose_check', sql`${t.purpose} IN ('login','password_reset')`),
+    // doc 04 → magic_links: CHECK derivado de magicLinkStatusValues
+    check('magic_links_status_check', sql`${t.status} IN (${inList(magicLinkStatusValues)})`),
+    // doc 04 → magic_links: CHECK derivado de magicLinkPurposeValues
+    check('magic_links_purpose_check', sql`${t.purpose} IN (${inList(magicLinkPurposeValues)})`),
   ],
 );

@@ -3,6 +3,7 @@ import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { isRefreshExpired } from '../../domain/refreshExpiry.js';
+import { refreshTokenStatusSchema } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type LogoutCommand = {
@@ -28,7 +29,7 @@ export class Logout implements UseCase<LogoutCommand, void> {
     const found = await this.users.findByRefreshTokenHash(tokenHash);
 
     // 401 genérico: token ausente/desconocido (semántica transversal, AC-03).
-    if (!found || found.status !== 'active') throw new ApiError(ErrorCodes.UNAUTHORIZED);
+    if (!found || found.status !== refreshTokenStatusSchema.enum.active) throw new ApiError(ErrorCodes.UNAUTHORIZED);
     if (isRefreshExpired(found.expiresAt, now)) throw new ApiError(ErrorCodes.UNAUTHORIZED);
 
     await this.users.revokeRefreshToken(tokenHash);
