@@ -8,7 +8,11 @@ import type { SuccessBody } from './envelope.js';
  *   `null` significa "sin body", NO un payload nulo (hoy ningún endpoint devuelve `{ data: null }`).
  * El status code sigue siendo decisión del handler (transporte), junto a su `execute`.
  */
-export const writeSuccess = <T>(res: Response, status: number, data: T | null): void => {
+
+/** Status de éxito del contrato: conjunto cerrado de 2xx emitidos por writeSuccess (doc 03 → responses). */
+export type SuccessStatus = 200 | 201 | 204;
+
+export const writeSuccess = <T>(res: Response, status: SuccessStatus, data: T | null): void => {
   if (data === null) {
     res.status(status).end();
     return;

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import type { ErrorCode, ValidationIssue } from '../../domain/errorCatalog.js';
-import { writeError } from '../protocol/error.js';
+import { writeError, type ErrorStatus } from '../protocol/error.js';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from '../protocol/errorKinds.js';
 import { generateRequestId } from './middleware.js';
 import { ApiError, isApiError } from '../../domain/apiError.js';
@@ -12,7 +12,7 @@ import { ERROR_MESSAGES, ErrorCodes } from '../../domain/errorCatalog.js';
  * El dominio nunca conoce HTTP: esta es la ÚNICA frontera que mapea códigos a status.
  * Record exhaustivo: agregar un código al catálogo sin status aquí falla en compilación.
  */
-export const STATUS_BY_CODE: Record<ErrorCode, number> = {
+export const STATUS_BY_CODE: Record<ErrorCode, ErrorStatus> = {
   [ErrorCodes.VALIDATION_ERROR]: 422,
   [ErrorCodes.INVALID_CREDENTIALS]: 401,
   [ErrorCodes.EMAIL_ALREADY_EXISTS]: 409,
