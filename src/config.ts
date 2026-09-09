@@ -4,9 +4,14 @@ import 'dotenv/config';
 /** Prefijo de montaje de la API (doc 00 → nº 56): fuente única para el mount en index.ts y los links de email. */
 export const API_PREFIX = '/api/v1';
 
+/** Entornos de ejecución (NODE_ENV): fuente única del enum zod y del tipo NodeEnv derivado. */
+export const nodeEnvValues = ['development', 'test', 'production'] as const;
+
+export const nodeEnvSchema = z.enum(nodeEnvValues);
+
 // Esquema de las variables de entorno: valida, aplica defaults y transforma al shape limpio.
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: nodeEnvSchema.default('development'),
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   // Interfaz de bind del server HTTP (doc 00 → ítem 14). '0.0.0.0' expone en todas las interfaces.
   HOST: z.string().min(1).default('localhost'),
