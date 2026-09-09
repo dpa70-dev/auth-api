@@ -1,0 +1,14 @@
+stateDiagram-v2
+    direction LR
+    [*] --> closed
+    closed --> open: N fallos consecutivos<br/>(timeout / error de red)
+    open --> half_open: ventana de enfriamiento<br/>(dejar pasar un probe)
+    half_open --> closed: probe exitoso
+    half_open --> open: probe falla (ampliar enfriamiento)
+    open --> [*]
+    closed --> [*]
+    note right of open
+        abierto ⇒ /auth/google responde
+        fallo rápido SIN esperar a Google
+        (mismo código de error del contrato)
+    end note

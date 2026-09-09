@@ -1,0 +1,18 @@
+flowchart TB
+    subgraph HOY["HOY — el mismo esqueleto copiado en cada handler"]
+        direction TB
+        H1["authRegisterHandler"] --> B1["try { parse → execute → writeSuccess }<br/>catch → next(err)"]:::rep
+        H2["authLoginHandler"] --> B2["try { parse → execute → writeSuccess }<br/>catch → next(err)"]:::rep
+        H3["authRefreshHandler"] --> B3["try { parse → execute → writeSuccess }<br/>catch → next(err)"]:::rep
+    end
+    subgraph PROP["CON wrapper — esqueleto único (Template Method)"]
+        direction TB
+        W["handle(useCase, parse, status)"] --> P["parse(req.body)"]
+        P --> E["useCase.execute(cmd)"]
+        E --> S["writeSuccess(res, status, result)"]
+        P -. "ZodError / ApiError" .-> C["next(err) → finalErrorHandler"]
+        E -. "cualquier error" .-> C
+    end
+    classDef rep fill:#fdecea,stroke:#d93026
+    classDef flow fill:#e6f4ea,stroke:#188038
+    class W,P,E,S,C flow

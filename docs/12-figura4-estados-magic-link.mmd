@@ -1,0 +1,14 @@
+stateDiagram-v2
+    direction LR
+    [*] --> pending: requestMagicLink crea el link
+    pending --> used: consume exitoso
+    pending --> expired: TTL superado (requestMagicLink fija exp)
+    pending --> revoked: revocación explícita
+    used --> [*]
+    expired --> [*]
+    revoked --> [*]
+    note right of used
+        reintento del mismo token:
+        el servidor responde 401 (indistinguible
+        de un token desconocido) — el retry cae aquí
+    end note

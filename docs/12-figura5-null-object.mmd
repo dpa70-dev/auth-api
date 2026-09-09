@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph HOY["HOY — nulabilidad hasta el transporte"]
+        direction TB
+        UC["buildUseCases →<br/>UseCases.loginGoogle: LoginGoogle | null"] --> H["authGoogleHandler"]
+        H --> Q{"loginGoogle === null?"}
+        Q -- "sí" --> E1["throw INTERNAL_ERROR<br/>'Google no configurado'"]
+        Q -- "no (normal)" --> E2["execute(idToken, nonce)"]
+    end
+    subgraph OPA["OPCIÓN A — Null Object"]
+        direction TB
+        UC2["UseCases.loginGoogle: LoginGoogle<br/>(siempre compuesto)"] --> H2["handler incondicional:<br/>parse → execute → writeSuccess"]
+        NO["LoginGoogleUnavailable.execute()<br/>→ throw ApiError(INTERNAL_ERROR)"] -. "se compone cuando<br/>google === null" .- UC2
+    end
+    subgraph OPB["OPCIÓN B — composición condicional"]
+        direction TB
+        RT["routes.ts: montar /auth/google<br/>solo si google !== null"] --> R404["deployment sin Google:<br/>404 (ruta inexistente) en vez de 500"]
+    end
+    classDef hoy fill:#fdecea,stroke:#d93026
+    class UC,H,Q,E1,E2 hoy

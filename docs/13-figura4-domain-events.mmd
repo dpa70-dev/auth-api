@@ -1,0 +1,22 @@
+flowchart LR
+    subgraph UC["Use cases — src/app/useCases"]
+        direction TB
+        L["Login · RefreshTokens · ChangePassword<br/>RegisterUser · ConsumeMagicLink · Logout"]
+    end
+    BUS["EventPublisher (bus en proceso)"] 
+    UC -->|"publica eventos de dominio<br/>(el vocabulario de LOG_EVENTS)"| BUS
+    subgraph SUBS["Suscriptores (cada uno opcional, todos desacoplados)"]
+        direction TB
+        S1["Logging (pino) — el suscriptor actual,<br/>ahora como uno más"]
+        S2["Auditoría de seguridad<br/>(login nueva IP, password cambiada)"]
+        S3["Alertas — reuso detectado, intentos fallidos"]
+        S4["Métricas / telemetría"]
+    end
+    BUS --> S1
+    BUS --> S2
+    BUS --> S3
+    BUS --> S4
+    subgraph HOY["HOY — log inline"]
+        direction TB
+        LG["this.logger.info(LOG_EVENTS.PASSWORD_CHANGED, …)<br/>el vocabulario existe, la publicación no"]
+    end

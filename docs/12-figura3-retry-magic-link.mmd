@@ -1,0 +1,16 @@
+sequenceDiagram
+    autonumber
+    participant U as Usuario (clic en el link del email)
+    participant API as API — POST /auth/magic-link/consume
+    participant DB as SQLite (magic_links)
+
+    U->>API: 1. consume(token)
+    API->>DB: 2. findByTokenHash → status pending
+    API->>DB: 3. markEmailVerified / createUser (auto-cuenta)
+    API->>DB: 4. markUsed(token) ← single-use
+    API->>DB: 5. insertRefreshToken (sesión emitida)
+    API-->>U: X — timeout de red (respuesta perdida)
+    U->>API: 6. reintento con el MISMO token
+    API->>DB: 7. findByTokenHash → status used
+    API-->>U: 8. 401 MAGIC_LINK_INVALID
+    Note over U,DB: la sesión SÍ se emitió (paso 5), pero el usuario<br/>recibe 401: operación exitosa percibida como fallida

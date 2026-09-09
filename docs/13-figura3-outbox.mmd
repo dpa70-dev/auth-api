@@ -1,0 +1,16 @@
+flowchart TB
+    subgraph HOY["HOY — dos operaciones independientes"]
+        direction TB
+        A1["INSERT magic_links (pending)"] --> B1["enviar email (fire & forget)"]
+        A1 -. "el envío falla" .-> R1["link muerto: el link existe,<br/>el email nunca llegó"]:::risk
+        B1 -. "el INSERT falla" .-> R2["email huérfano: el email llegó,<br/>el link no existe"]:::risk
+    end
+    subgraph OUTBOX["CON outbox — atómico con reintento"]
+        direction TB
+        A2["INSERT magic_links (pending)"] --> B2["INSERT outbox (email + mensaje)"] --> C2["COMMIT"]
+        C2 --> D2["Relay worker (poll outbox)"]
+        D2 --> E2["enviar email (SMTP) — ConsoleEmailSender dev"]
+        E2 -- "éxito" --> F2["outbox → sent"]
+        E2 -- "fallo" --> G2["reintento con backoff + dedup<br/>por (email, token_hash)"] --> D2
+    end
+    classDef risk fill:#fdecea,stroke:#d93026

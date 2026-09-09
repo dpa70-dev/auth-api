@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant A as Cliente A (móvil, red inestable)
+    participant B as Cliente B (desktop, sesión activa)
+    participant API as API — POST /auth/refresh
+    participant DB as SQLite (refresh_tokens)
+
+    A->>API: 1. refreshToken v1
+    API->>DB: 2. findByRefreshTokenHash(v1) → status activo
+    API->>DB: 3. markRefreshTokenUsed(v1) ← rotación en curso
+    API-->>A: 4. responde par nuevo (access + refresh v2)
+    Note over A,API: timeout de red — A nunca recibe v2
+    A->>API: 5. reintento con v1 (el único token que posee)
+    API->>DB: 6. findByRefreshTokenHash(v1) → status=used
+    API->>DB: 7. REUSO detectado → revokeFamily(userId)
+    Note over DB: familyId == userId ⇒ se revoca la familia ENTERA:<br/>también el refresh de B (sesión desktop)
+    API-->>A: 8. 401 UNAUTHORIZED (genérico, anti-enumeración)
+    B->>API: 9. B intenta refrescar con su token → ya está revoked
+    API-->>B: 10. 401 UNAUTHORIZED — sesión desktop caída

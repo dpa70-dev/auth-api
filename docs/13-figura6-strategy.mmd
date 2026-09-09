@@ -1,0 +1,22 @@
+flowchart LR
+    subgraph APP["Capa aplicación — use cases"]
+        UC["Login · RegisterUser · RefreshTokens"]
+    end
+    subgraph STR["Estrategias — puertos del dominio (Strategy)"]
+        TI["«interface» TokenIssuer"]
+        PH["«interface» PasswordHasher"]
+    end
+    subgraph IMPL["Implementaciones intercambiables — infra"]
+        T1["JoseTokenService · HS256<br/>(hoy · un solo servicio)"]
+        T2["JoseTokenService · RS256/ES256 + kid<br/>(multi-servicio · rotación de claves)"]
+        P1["Argon2PasswordHasher · argon2id<br/>(hoy)"]
+        P2["bcrypt / scrypt<br/>(migración futura con re-hash en login)"]
+    end
+    UC --> TI
+    UC --> PH
+    TI -. "estrategia actual" .-> T1
+    TI -. "futura · verificación externa" .-> T2
+    PH -. "estrategia actual" .-> P1
+    PH -. "futura" .-> P2
+    classDef port fill:#e8f0fe,stroke:#4285f4,stroke-dasharray:4 3
+    class TI,PH port

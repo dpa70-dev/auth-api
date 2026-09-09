@@ -1,0 +1,16 @@
+sequenceDiagram
+    autonumber
+    participant UC as RegisterUser.execute
+    participant UOW as UnitOfWork (puerto)
+    participant TR as Repos transaccionales
+    participant DB as SQLite
+
+    UC->>UOW: withTransaction(async (repos) => ...)
+    UOW->>DB: BEGIN
+    UOW->>TR: entrega repos con la tx abierta
+    TR->>DB: createUser(id, email, hash) — escritura 1
+    TR->>DB: insertRefreshToken(jti, hash, ...) — escritura 2
+    TR-->>UOW: ok
+    UOW->>DB: COMMIT
+    Note over UOW,DB: si la escritura 2 lanza → ROLLBACK<br/>sin estado parcial (usuario sin sesión)
+    UOW-->>UC: resultado tipado

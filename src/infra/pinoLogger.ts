@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { join } from 'node:path';
 import { pino, type LevelWithSilent, type Logger as PinoInstance, type LoggerOptions } from 'pino';
 import type { Logger } from '../domain/port/index.js';
 import type { NodeEnv } from '../config.js';
@@ -35,8 +36,23 @@ export class PinoLogger implements Logger {
 
     if (this.nodeEnv === 'development') {
       options.transport = {
-        target: 'pino-pretty',
-        options: { colorize: true, translateTime: 'SYS:standard' },
+        targets: [
+          {
+            target: 'pino-roll',
+            options: {
+              file: join('logs', 'app-'),
+              frequency: 'daily',
+              dateFormat: 'yyyy-MM-dd',
+              mkdir: true,
+            },
+            level: 'debug',
+          },
+          {
+            target: 'pino-pretty',
+            options: { colorize: true, translateTime: 'SYS:standard' },
+            level: 'debug',
+          },
+        ],
       };
     }
 

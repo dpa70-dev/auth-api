@@ -6,7 +6,7 @@ import type {
   UserRepository,
 } from '../domain/port/index.js';
 import { refreshTokens, users } from '../db/schema.js';
-import type { Email, GoogleSub, Jti, PasswordHash, Provider, RefreshTokenStatus, Timestamp, UserId } from '../domain/vo/index.js';
+import { refreshTokenStatusSchema, type Email, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../domain/vo/index.js';
 import { UniqueConstraintViolation } from '../domain/uniqueConstraintViolation.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
@@ -100,16 +100,16 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async markRefreshTokenUsed(tokenHash: string): Promise<void> {
-    this.db.update(refreshTokens).set({ status: 'used' }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
+    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.used }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
   }
 
   async revokeRefreshToken(tokenHash: string): Promise<void> {
-    this.db.update(refreshTokens).set({ status: 'revoked' }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
+    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
   }
 
   async revokeFamily(userId: UserId): Promise<void> {
     // familia = user_id (decisión 2, doc 04): revocar todos los refresh del usuario.
-    this.db.update(refreshTokens).set({ status: 'revoked' }).where(eq(refreshTokens.familyId, userId)).run();
+    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.familyId, userId)).run();
   }
 
   async markEmailVerified(email: Email): Promise<void> {
