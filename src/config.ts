@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import 'dotenv/config';
+import { API_PATHS } from './api/paths.js';
 
 /** Prefijo de montaje de la API (doc 00 → nº 56): fuente única para el mount en index.ts y los links de email. */
 export const API_PREFIX = '/api/v1';
@@ -90,8 +91,8 @@ const envSchema = z.object({
       },
       magicLink: {
         ttlMinutes: data.MAGIC_LINK_TTL_MINUTES,
-        consumeBaseUrl: `${apiOrigin}${API_PREFIX}/auth/magic-link/consume`,
-        passwordResetConsumeBaseUrl: `${apiOrigin}${API_PREFIX}/auth/password/reset`,
+        consumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.magicLinkConsume}`,
+        passwordResetConsumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.passwordReset}`,
       },
     };
   });

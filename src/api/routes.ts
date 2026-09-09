@@ -8,6 +8,7 @@ import { ERROR_MESSAGES, ErrorCodes } from '../domain/errorCatalog.js';
 import type { UseCases } from '../app/buildUseCases.js';
 import { buildHandlers } from './buildHandlers.js';
 import type { ApiDeps } from './deps.js';
+import { API_PATHS } from './paths.js';
 import type { Config } from '../config.js';
 
 /** Los endpoints /auth comparten el rate limit estricto (doc 00 → ítems 41, 48-49). */
@@ -55,18 +56,18 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
 
   // Rutas declaradas en UN solo lugar: el registro y el 405 derivan de la misma tabla (OCP/DRY).
   const routeTable: RouteDeclaration[] = [
-    { method: 'post', path: '/auth/register', guards: [authLimiter(deps.config)], handler: authRegisterHandler },
-    { method: 'post', path: '/auth/login', guards: [authLimiter(deps.config)], handler: authLoginHandler },
-    { method: 'post', path: '/auth/refresh', guards: [authLimiter(deps.config)], handler: authRefreshHandler },
-    { method: 'post', path: '/auth/logout', guards: [authLimiter(deps.config)], handler: authLogoutHandler },
+    { method: 'post', path: API_PATHS.register, guards: [authLimiter(deps.config)], handler: authRegisterHandler },
+    { method: 'post', path: API_PATHS.login, guards: [authLimiter(deps.config)], handler: authLoginHandler },
+    { method: 'post', path: API_PATHS.refresh, guards: [authLimiter(deps.config)], handler: authRefreshHandler },
+    { method: 'post', path: API_PATHS.logout, guards: [authLimiter(deps.config)], handler: authLogoutHandler },
     // US-11: requiere sesión (la contraseña actual es el reto) y luego el throttle de /auth.
-    { method: 'post', path: '/auth/change-password', guards: [requireAuth(deps.tokens), authLimiter(deps.config)], handler: authChangePasswordHandler },
-    { method: 'post', path: '/auth/google', guards: [authLimiter(deps.config)], handler: authGoogleHandler },
-    { method: 'post', path: '/auth/magic-link/request', guards: [authLimiter(deps.config)], handler: magicLinkRequestHandler },
-    { method: 'post', path: '/auth/magic-link/consume', guards: [authLimiter(deps.config)], handler: magicLinkConsumeHandler },
+    { method: 'post', path: API_PATHS.changePassword, guards: [requireAuth(deps.tokens), authLimiter(deps.config)], handler: authChangePasswordHandler },
+    { method: 'post', path: API_PATHS.google, guards: [authLimiter(deps.config)], handler: authGoogleHandler },
+    { method: 'post', path: API_PATHS.magicLinkRequest, guards: [authLimiter(deps.config)], handler: magicLinkRequestHandler },
+    { method: 'post', path: API_PATHS.magicLinkConsume, guards: [authLimiter(deps.config)], handler: magicLinkConsumeHandler },
     // US-12: el token del email ES la credencial → solo authLimiter (sin requireAuth).
-    { method: 'post', path: '/auth/password/reset', guards: [authLimiter(deps.config)], handler: passwordResetHandler },
-    { method: 'get', path: '/auth/me', guards: [requireAuth(deps.tokens)], handler: meHandler },
+    { method: 'post', path: API_PATHS.passwordReset, guards: [authLimiter(deps.config)], handler: passwordResetHandler },
+    { method: 'get', path: API_PATHS.me, guards: [requireAuth(deps.tokens)], handler: meHandler },
   ];
 
   const allowedMethods: Record<string, string[]> = {};
