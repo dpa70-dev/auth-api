@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
-import type { ErrorBody } from '../protocol/envelope.js';
 import type { ErrorCode, ValidationIssue } from '../../domain/errorCatalog.js';
+import { writeError } from '../protocol/error.js';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from '../protocol/errorKinds.js';
 import { generateRequestId } from './middleware.js';
 import { ApiError, isApiError } from '../../domain/apiError.js';
@@ -107,8 +107,4 @@ const isMalformedBody = (err: unknown): boolean => {
   if (typeof err !== 'object' || err === null) return false;
   const type = (err as { type?: unknown }).type;
   return type === 'entity.parse.failed' || type === 'entity.too.large';
-};
-
-const writeError = (res: Response, status: number, error: ErrorBody['error']): void => {
-  res.status(status).json({ error });
 };
