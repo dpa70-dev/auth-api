@@ -6,6 +6,7 @@ import type {
   TokenIssuer,
 } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
+import { expiresAtIso, minutesToMs } from '../../domain/time.js';
 import { magicLinkPurposeSchema, type Email, type MagicLinkPurpose } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -43,7 +44,7 @@ export class RequestMagicLink implements UseCase<RequestMagicLinkCommand, Reques
 
     const rawToken = randomBytes(32).toString('base64url');
     const tokenHash = await this.tokens.hashRefreshToken(rawToken);
-    const expiresAt = new Date(now.getTime() + cmd.magicLinkTtlMinutes * 60 * 1000).toISOString();
+    const expiresAt = expiresAtIso(now, minutesToMs(cmd.magicLinkTtlMinutes));
     await this.magicLinks.insert({
       id: randomUUID(),
       tokenHash,
