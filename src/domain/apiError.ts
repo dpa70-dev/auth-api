@@ -1,4 +1,4 @@
-import { ErrorCodes, ERROR_MESSAGES, type ErrorCode, type ValidationIssue } from './errorCatalog.js';
+import { ERROR_MESSAGES, type ErrorCode, type ValidationIssue } from './errorCatalog.js';
 
 /**
  * Error del dominio con código del catálogo (doc 03 → schema Error.code).
@@ -16,10 +16,6 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.code = code;
     this.details = options?.details;
-  }
-
-  static validation(details: ValidationIssue[]): ApiError {
-    return new ApiError(ErrorCodes.VALIDATION_ERROR, { details });
   }
 }
 
