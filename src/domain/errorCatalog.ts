@@ -11,6 +11,7 @@ export const ERROR_CATALOG = [
   { code: 'ACCOUNT_EXISTS_WITH_GOOGLE', message: 'Ya existe una cuenta con este email usando Google. Entrá con Google.' },
   { code: 'ACCOUNT_HAS_NO_PASSWORD', message: 'La cuenta no tiene una contraseña configurada.' },
   { code: 'EMAIL_NOT_VERIFIED', message: 'El email no está verificado en Google.' },
+  { code: 'PASSWORD_COMPROMISED', message: 'La contraseña fue comprometida en una filtración conocida; elegí otra.' },
   { code: 'MAGIC_LINK_INVALID', message: 'Enlace de acceso inválido o expirado.' },
   { code: 'RATE_LIMITED', message: 'Demasiados intentos. Reintentá más tarde.' },
   { code: 'UNAUTHORIZED', message: 'No autenticado.' },

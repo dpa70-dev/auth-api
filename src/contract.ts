@@ -390,12 +390,13 @@ export interface components {
                  * @description Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                  *     documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
                  *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID,
-                 *     ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; UNAUTHORIZED y MALFORMED_REQUEST completan la
-                 *     matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405 centralizado
-                 *     (doc 00 → ítem 24); INTERNAL_ERROR para 500.
+                 *     ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
+                 *     filtraciones conocidas (NIST 800-63B §5.1.1.2); UNAUTHORIZED y MALFORMED_REQUEST
+                 *     completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405
+                 *     centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */

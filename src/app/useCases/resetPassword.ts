@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, type PlainPassword } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -22,6 +22,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     private readonly users: UserRepository,
     private readonly magicLinks: MagicLinkRepository,
     private readonly hasher: PasswordHasher,
+    private readonly compromised: CompromisedPasswordChecker,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
   ) {}
@@ -46,6 +47,14 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     if (found.purpose !== magicLinkPurposeSchema.enum.password_reset) {
       this.logger.warn(LOG_EVENTS.PASSWORD_RESET_INVALID_ATTEMPT, { email: found.email });
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
+    }
+
+    // NIST 800-63B §5.1.1.2: filtrar contraseñas comprometidas antes de persistir el hash.
+    if ((await this.compromised.check(cmd.newPassword)) === 'compromised') {
+      this.logger.warn(LOG_EVENTS.PASSWORD_COMPROMISED_REJECTED, { email: found.email });
+      throw new ApiError(ErrorCodes.PASSWORD_COMPROMISED, {
+        details: [{ field: 'password', issue: 'compromised' }],
+      });
     }
 
     const passwordHash = await this.hasher.hash(cmd.newPassword);

@@ -1,6 +1,6 @@
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, PasswordHasher, UserRepository } from '../../domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, PasswordHasher, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS, LOG_REASONS } from '../../domain/port/index.js';
 import type { PlainPassword, UserId } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -20,6 +20,7 @@ export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
   constructor(
     private readonly users: UserRepository,
     private readonly hasher: PasswordHasher,
+    private readonly compromised: CompromisedPasswordChecker,
     private readonly logger: Logger,
   ) {}
 
@@ -36,6 +37,14 @@ export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
     if (!verified) {
       this.logger.warn(LOG_EVENTS.PASSWORD_CHANGE_FAILED, { reason: LOG_REASONS.PASSWORD_MISMATCH, userId: user.id });
       throw new ApiError(ErrorCodes.INVALID_CREDENTIALS);
+    }
+
+    // NIST 800-63B §5.1.1.2: la contraseña nueva no puede estar en filtraciones conocidas.
+    if ((await this.compromised.check(cmd.newPassword)) === 'compromised') {
+      this.logger.warn(LOG_EVENTS.PASSWORD_COMPROMISED_REJECTED, { userId: user.id });
+      throw new ApiError(ErrorCodes.PASSWORD_COMPROMISED, {
+        details: [{ field: 'newPassword', issue: 'compromised' }],
+      });
     }
 
     const passwordHash = await this.hasher.hash(cmd.newPassword);

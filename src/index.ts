@@ -18,8 +18,8 @@ import { finalErrorHandler, notFound } from './api/middlewares/errorMiddleware.j
 export type AppDeps = ComposeOverrides;
 
 export const buildApp = (overrides: AppDeps = {}) => {
-  const { users, hasher, tokens, google, magicLinks, sender, logger, close } = composeInfra(overrides);
-  const useCases = buildUseCases({ users, hasher, tokens, google, magicLinks, sender }, logger);
+  const { users, hasher, tokens, google, magicLinks, sender, compromised, logger, close } = composeInfra(overrides);
+  const useCases = buildUseCases({ users, hasher, tokens, google, magicLinks, sender, compromised }, logger);
 
   const app = express();
   app.disable('x-powered-by');

@@ -63,6 +63,14 @@ const envSchema = z.object({
     .transform((s) => (s && s.trim() !== '' ? s.trim() : undefined))
     .pipe(z.url().optional())
     .transform((s) => (s ? s.replace(/\/+$/, '') : undefined)),
+
+  // Fallback local de NIST 800-63B §5.1.1.2: archivo de hashes SHA-1 (uno por línea) de la
+  // lista top-100k de contraseñas comprometidas, generado con scripts/topPasswords.ts.
+  // Ruta relativa a la raíz del proyecto. Ausente/al vacío → solo lista embebida + patrones.
+  LOCAL_PASSWORD_LIST_PATH: z
+    .string()
+    .optional()
+    .transform((s) => (s && s.trim() !== '' ? s.trim() : undefined)),
 })
   // Transforma el objeto completo a la estructura limpia de la API (fuente única del shape).
   .transform((data) => {
@@ -94,6 +102,7 @@ const envSchema = z.object({
         consumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.magicLinkConsume}`,
         passwordResetConsumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.passwordReset}`,
       },
+      localPasswordListPath: data.LOCAL_PASSWORD_LIST_PATH ?? 'data/top-100k-sha1.txt',
     };
   });
 

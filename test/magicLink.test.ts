@@ -3,10 +3,12 @@ import Database from 'better-sqlite3';
 import type { Server } from 'node:http';
 import { createHash } from 'node:crypto';
 import { buildApp } from '../src/index.js';
-import type { EmailSender, Logger } from '../src/domain/port/index.js';
+import type { CompromisedPasswordChecker, EmailSender, Logger } from '../src/domain/port/index.js';
 import type { Email } from '../src/domain/vo/index.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
+/** Screen falso: ninguna contraseña está comprometida (los tests no pueden depender de la red). */
+const noOpCompromisedChecker: CompromisedPasswordChecker = { check: async () => 'clean' };
 
 type AuthData = {
   accessToken: string;
@@ -42,7 +44,7 @@ type TestContext = { baseUrl: string; sender: FakeEmailSender; close: () => Prom
 
 const startApp = async (sender: FakeEmailSender): Promise<TestContext> => {
   const db = new Database(':memory:');
-  const { app, close } = buildApp({ db, google: null, logger: silentLogger, sender });
+  const { app, close } = buildApp({ db, google: null, logger: silentLogger, sender, compromised: noOpCompromisedChecker });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));
   });

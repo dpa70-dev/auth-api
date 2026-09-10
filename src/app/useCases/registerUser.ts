@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
-import type { Logger, PasswordHasher, TokenIssuer, UserRecord, UserRepository } from '../../domain/port/index.js';
+import type {
+  CompromisedPasswordChecker,
+  Logger,
+  PasswordHasher,
+  TokenIssuer,
+  UserRecord,
+  UserRepository,
+} from '../../domain/port/index.js';
 import { providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
@@ -25,6 +32,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
   constructor(
     private readonly users: UserRepository,
     private readonly hasher: PasswordHasher,
+    private readonly compromised: CompromisedPasswordChecker,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
   ) {}
@@ -32,6 +40,15 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
   async execute(cmd: RegisterUserCommand): Promise<RegisterUserResult> {
     const now = cmd.now ?? new Date();
     const id = userIdSchema.parse(randomUUID());
+
+    // NIST 800-63B §5.1.1.2: filtrar contraseñas comprometidas. Fail fast — antes del findByEmail,
+    // para no crear cuenta ni consultar emails existentes con una contraseña que será rechazada igual.
+    if ((await this.compromised.check(cmd.password)) === 'compromised') {
+      this.logger.warn(LOG_EVENTS.PASSWORD_COMPROMISED_REJECTED, { email: cmd.email });
+      throw new ApiError(ErrorCodes.PASSWORD_COMPROMISED, {
+        details: [{ field: 'password', issue: 'compromised' }],
+      });
+    }
 
     const existing = await this.users.findByEmail(cmd.email);
     if (existing) throw collisionError(existing);

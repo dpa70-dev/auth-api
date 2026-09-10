@@ -3,8 +3,11 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
-import type { EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository } from '../domain/port/index.js';
+import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository } from '../domain/port/index.js';
 import { Argon2PasswordHasher } from './argon2PasswordHasher.js';
+import { CompositeCompromisedPasswordChecker } from './compositeCompromisedPasswordChecker.js';
+import { HibpCompromisedPasswordChecker } from './hibpCompromisedPasswordChecker.js';
+import { LocalCompromisedPasswordChecker } from './localCompromisedPasswordChecker.js';
 import { JoseTokenService } from './joseTokenService.js';
 import { DrizzleUserRepository } from './drizzleUserRepository.js';
 import { DrizzleMagicLinkRepository } from './drizzleMagicLinkRepository.js';
@@ -21,6 +24,8 @@ export type ComposeOverrides = {
   logger?: Logger;
   magicLinks?: MagicLinkRepository;
   sender?: EmailSender;
+  /** Fake del screen de filtraciones (tests) — por defecto HIBP real. */
+  compromised?: CompromisedPasswordChecker;
 };
 
 export type InfraPorts = {
@@ -30,6 +35,7 @@ export type InfraPorts = {
   google: GoogleIdTokenVerifier | null;
   magicLinks: MagicLinkRepository;
   sender: EmailSender;
+  compromised: CompromisedPasswordChecker;
   logger: Logger;
   close: () => void;
 };
@@ -49,6 +55,14 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
   migrate(db, { migrationsFolder: './migrations' });
 
   const hasher = new Argon2PasswordHasher();
+  // Screen de filtraciones: HIBP online con fallback local (NIST §5.1.1.2). Un outage de HIBP
+  // degrada a la lista embebida + top-100k + patrones — nunca bloquea el alta (fail-open en el composite).
+  const compromised = overrides.compromised
+    ?? new CompositeCompromisedPasswordChecker(
+      new HibpCompromisedPasswordChecker(logger),
+      new LocalCompromisedPasswordChecker(logger, cfg.localPasswordListPath),
+      logger,
+    );
   const tokens = new JoseTokenService(new TextEncoder().encode(cfg.jwtSecret), cfg.accessTtlMinutes);
   const users = new DrizzleUserRepository(db);
   const magicLinks = overrides.magicLinks ?? new DrizzleMagicLinkRepository(db);
@@ -59,5 +73,5 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
       ? new GoogleIdTokenVerifierJose(cfg.google.clientId, cfg.google.issuer, cfg.google.jwksUrl)
       : null;
 
-  return { users, hasher, tokens, google, magicLinks, sender, logger, close: () => sqlite.close() };
+  return { users, hasher, tokens, google, magicLinks, sender, compromised, logger, close: () => sqlite.close() };
 };

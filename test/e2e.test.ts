@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import type { Server } from 'node:http';
 import { buildApp } from '../src/index.js';
-import type { GoogleClaims, GoogleIdTokenVerifier, Logger } from '../src/domain/port/index.js';
+import type { CompromisedPasswordChecker, GoogleClaims, GoogleIdTokenVerifier, Logger } from '../src/domain/port/index.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
+/** Screen falso: ninguna contraseña está comprometida (los tests no pueden depender de la red). */
+const noOpCompromisedChecker: CompromisedPasswordChecker = { check: async () => 'clean' };
 
 // Formas del envelope del contrato docs/03 (éxito/error) para tipar las respuestas JSON.
 type AuthData = {
@@ -34,7 +36,7 @@ type TestContext = { baseUrl: string; close: () => Promise<void> };
 
 const startApp = async (google: GoogleIdTokenVerifier | null = null): Promise<TestContext> => {
   const db = new Database(':memory:');
-  const { app, close } = buildApp({ db, google, logger: silentLogger });
+  const { app, close } = buildApp({ db, google, logger: silentLogger, compromised: noOpCompromisedChecker });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));
   });

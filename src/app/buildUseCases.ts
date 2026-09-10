@@ -1,4 +1,5 @@
 import type {
+  CompromisedPasswordChecker,
   EmailSender,
   GoogleIdTokenVerifier,
   Logger,
@@ -28,6 +29,8 @@ export type Ports = {
   tokens: TokenIssuer;
   magicLinks: MagicLinkRepository;
   sender: EmailSender;
+  /** Screen NIST 800-63B §5.1.1.2 contra contraseñas comprometidas (HIBP en prod, fake en tests). */
+  compromised: CompromisedPasswordChecker;
   /** null ⇔ el verifier de Google no está disponible (ver GUIID en compose). */
   google: GoogleIdTokenVerifier | null;
 };
@@ -52,17 +55,17 @@ export type UseCases = {
  * en infra, que solo instancia implementaciones externas. La sesión se ensambla en index.ts.
  */
 export const buildUseCases = (
-  { users, hasher, tokens, magicLinks, sender, google }: Ports,
+  { users, hasher, tokens, magicLinks, sender, compromised, google }: Ports,
   logger: Logger,
 ): UseCases => ({
-  registerUser: new RegisterUser(users, hasher, tokens, logger),
+  registerUser: new RegisterUser(users, hasher, compromised, tokens, logger),
   login: new Login(users, hasher, tokens, logger),
   refreshTokens: new RefreshTokens(users, tokens, logger),
   logout: new Logout(users, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
   consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, logger),
   me: new GetMe(users, logger),
-  changePassword: new ChangePassword(users, hasher, logger),
-  resetPassword: new ResetPassword(users, magicLinks, hasher, tokens, logger),
+  changePassword: new ChangePassword(users, hasher, compromised, logger),
+  resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, logger),
   loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger),
 });

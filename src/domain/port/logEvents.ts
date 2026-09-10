@@ -23,6 +23,9 @@ export const LOG_EVENTS = {
   PASSWORD_RESET_CONSUMED: 'password_reset_consumed',
   PASSWORD_RESET_INVALID_ATTEMPT: 'password_reset_invalid_attempt',
   PASSWORD_RESET_REGISTERED: 'password_reset_registered',
+  PASSWORD_COMPROMISED_REJECTED: 'password_compromised_rejected',
+  PASSWORD_BREACH_CHECK_FAILED: 'password_breach_check_failed',
+  PASSWORD_BREACH_CHECK_FALLBACK: 'password_breach_check_fallback',
 } as const;
 
 /** Unión de eventos válidos: el puerto solo admite estos — compilar = no hay typos. */

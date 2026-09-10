@@ -19,6 +19,7 @@ export const STATUS_BY_CODE: Record<ErrorCode, ErrorStatus> = {
   [ErrorCodes.ACCOUNT_EXISTS_WITH_GOOGLE]: 409,
   [ErrorCodes.ACCOUNT_HAS_NO_PASSWORD]: 409,
   [ErrorCodes.EMAIL_NOT_VERIFIED]: 401,
+  [ErrorCodes.PASSWORD_COMPROMISED]: 422,
   [ErrorCodes.MAGIC_LINK_INVALID]: 401,
   [ErrorCodes.RATE_LIMITED]: 429,
   [ErrorCodes.UNAUTHORIZED]: 401,
