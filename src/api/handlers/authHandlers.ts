@@ -4,6 +4,7 @@ import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { UseCases } from '../../app/buildUseCases.js';
 import { changePasswordRequest, credentialsRequest, googleRequest, refreshRequest } from './schemas.js';
 import { writeSuccess } from '../protocol/success.js';
+import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from '../cookies.js';
 import type { ApiDeps } from '../deps.js';
 
 /** Handlers de credenciales (local) y Google. Cada uno es un cierre sobre (useCases, deps). */
@@ -16,6 +17,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
+      setRefreshCookie(res, result.refreshToken, deps.config);
       writeSuccess(res, 201, result);
     } catch (err) {
       next(err);
@@ -30,6 +32,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         password: body.password,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
+      setRefreshCookie(res, result.refreshToken, deps.config);
       writeSuccess(res, 200, result);
     } catch (err) {
       next(err);
@@ -38,11 +41,15 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
 
   const authRefreshHandler: RequestHandler = async (req, res, next) => {
     try {
-      const body = refreshRequest.parse(req.body);
+      // docs/06 §3.3: la cookie es la fuente primaria del refresh (web); el body (móvil) sigue.
+      const parsed = refreshRequest.safeParse(req.body ?? {});
+      const presented = readRefreshCookie(req) ?? (parsed.success ? parsed.data.refreshToken : undefined);
+      if (presented === undefined) throw new ApiError(ErrorCodes.UNAUTHORIZED);
       const result = await useCases.refreshTokens.execute({
-        refreshToken: body.refreshToken,
+        refreshToken: presented,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
+      setRefreshCookie(res, result.refreshToken, deps.config);
       writeSuccess(res, 200, result);
     } catch (err) {
       next(err);
@@ -51,8 +58,11 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
 
   const authLogoutHandler: RequestHandler = async (req, res, next) => {
     try {
-      const body = refreshRequest.parse(req.body);
-      await useCases.logout.execute({ refreshToken: body.refreshToken });
+      const parsed = refreshRequest.safeParse(req.body ?? {});
+      const presented = readRefreshCookie(req) ?? (parsed.success ? parsed.data.refreshToken : undefined);
+      if (presented === undefined) throw new ApiError(ErrorCodes.UNAUTHORIZED);
+      await useCases.logout.execute({ refreshToken: presented });
+      clearRefreshCookie(res, deps.config);
       writeSuccess(res, 204, null);
     } catch (err) {
       next(err);
@@ -87,6 +97,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         ...(body.nonce !== undefined ? { nonce: body.nonce } : {}),
         refreshTtlDays: deps.config.refreshTtlDays,
       });
+      setRefreshCookie(res, result.refreshToken, deps.config);
       writeSuccess(res, 200, result);
     } catch (err) {
       next(err);

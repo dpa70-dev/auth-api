@@ -3,6 +3,7 @@ import type { UseCases } from '../../app/buildUseCases.js';
 import { magicLinkPurposeSchema } from '../../domain/vo/index.js';
 import { magicLinkConsumeRequest, magicLinkRequest, passwordResetRequest } from './schemas.js';
 import { writeSuccess } from '../protocol/success.js';
+import { setRefreshCookie } from '../cookies.js';
 import type { ApiDeps } from '../deps.js';
 
 /** Handlers del flujo magic link (US-09 request, US-10 consume/auto-cuenta) y reset de contraseña (US-12). */
@@ -34,6 +35,7 @@ export const buildMagicLinkHandlers = (useCases: UseCases, deps: ApiDeps) => {
         token: body.token,
         refreshTtlDays: deps.config.refreshTtlDays,
       });
+      setRefreshCookie(res, result.refreshToken, deps.config);
       writeSuccess(res, 200, result);
     } catch (err) {
       next(err);

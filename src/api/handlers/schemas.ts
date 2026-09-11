@@ -10,7 +10,10 @@ export const credentialsRequest = z.object({
 });
 
 export const refreshRequest = z.object({
-  refreshToken: z.string({ message: 'refreshToken debe ser un string' }).min(1, { message: 'too_short' }),
+  refreshToken: z
+    .string({ message: 'refreshToken debe ser un string' })
+    .min(1, { message: 'too_short' })
+    .optional(),
 });
 
 export const googleRequest = z.object({
