@@ -65,6 +65,8 @@ export interface paths {
          *     token usado (rotación). Si se presenta un refresh ya usado (reuso), la respuesta es el mismo
          *     401 genérico Y se revoca TODA la familia de refresh del usuario (el atacante no debe saber
          *     que el reuso fue detectado).
+         *     La cookie `refresh_token` (web) tiene prioridad sobre el body (móvil); si no viene ninguna
+         *     fuente → 401 UNAUTHORIZED genérico. La respuesta emite el refresh NUEVO por cuerpo Y cookie.
          */
         post: operations["refreshTokens"];
         delete?: never;
@@ -87,6 +89,7 @@ export interface paths {
          * @description Revoca el refresh en base (US-04). El access vigente no se revoca explícitamente: expira solo
          *     por su corta vida (5-15 min, comportamiento esperado). Si el refresh revocado se presenta
          *     después en /refresh, el reuso revoca toda la familia.
+         *     La cookie `refresh_token` (web) tiene prioridad sobre el body (móvil); la respuesta elimina la cookie.
          */
         post: operations["logout"];
         delete?: never;
@@ -281,8 +284,9 @@ export interface components {
             token: components["schemas"]["MagicLinkToken"];
             password: components["schemas"]["Password"];
         };
+        /** @description Refresh token opcional — la cookie `refresh_token` (web) tiene prioridad si está presente (docs/06 §3.3). */
         RefreshRequest: {
-            refreshToken: components["schemas"]["RefreshToken"];
+            refreshToken?: components["schemas"]["RefreshToken"];
         };
         GoogleRequest: {
             /**
@@ -477,7 +481,14 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /**
+         * @description Cookie httpOnly de sesión web (docs/06 §3.2): tiene prioridad sobre el body (móvil) en
+         *     /auth/refresh y /auth/logout. La emiten register/login/google/magic-consume/refresh (Set-Cookie)
+         *     y la elimina el logout.
+         */
+        RefreshTokenCookie: components["schemas"]["RefreshToken"];
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -555,9 +566,17 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                /**
+                 * @description Cookie httpOnly de sesión web (docs/06 §3.2): tiene prioridad sobre el body (móvil) en
+                 *     /auth/refresh y /auth/logout. La emiten register/login/google/magic-consume/refresh (Set-Cookie)
+                 *     y la elimina el logout.
+                 */
+                refresh_token?: components["parameters"]["RefreshTokenCookie"];
+            };
         };
-        requestBody: {
+        /** @description Opcional — solo para clientes que no usan cookie (apps móviles); el campo refreshToken queda opcional. */
+        requestBody?: {
             content: {
                 "application/json": components["schemas"]["RefreshRequest"];
             };
@@ -584,9 +603,17 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                /**
+                 * @description Cookie httpOnly de sesión web (docs/06 §3.2): tiene prioridad sobre el body (móvil) en
+                 *     /auth/refresh y /auth/logout. La emiten register/login/google/magic-consume/refresh (Set-Cookie)
+                 *     y la elimina el logout.
+                 */
+                refresh_token?: components["parameters"]["RefreshTokenCookie"];
+            };
         };
-        requestBody: {
+        /** @description Opcional — solo para clientes que no usan cookie (apps móviles); el campo refreshToken queda opcional. */
+        requestBody?: {
             content: {
                 "application/json": components["schemas"]["RefreshRequest"];
             };

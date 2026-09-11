@@ -172,8 +172,15 @@ paths:
         token usado (rotación). Si se presenta un refresh ya usado (reuso), la respuesta es el mismo
         401 genérico Y se revoca TODA la familia de refresh del usuario (el atacante no debe saber
         que el reuso fue detectado).
+        La cookie `refresh_token` (web) tiene prioridad sobre el body (móvil); si no viene ninguna
+        fuente → 401 UNAUTHORIZED genérico. La respuesta emite el refresh NUEVO por cuerpo Y cookie.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RefreshTokenCookie'
       requestBody:
-        required: true
+        required: false
+        description: Opcional — solo para clientes que no usan cookie (apps móviles); el campo refreshToken queda opcional.
         content:
           application/json:
             schema:
@@ -215,8 +222,14 @@ paths:
         Revoca el refresh en base (US-04). El access vigente no se revoca explícitamente: expira solo
         por su corta vida (5-15 min, comportamiento esperado). Si el refresh revocado se presenta
         después en /refresh, el reuso revoca toda la familia.
+        La cookie `refresh_token` (web) tiene prioridad sobre el body (móvil); la respuesta elimina la cookie.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RefreshTokenCookie'
       requestBody:
-        required: true
+        required: false
+        description: Opcional — solo para clientes que no usan cookie (apps móviles); el campo refreshToken queda opcional.
         content:
           application/json:
             schema:
@@ -577,6 +590,25 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Access token JWT HS256 (5-15 min). El algoritmo de verificación se fija en el servidor.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: |
+        Refresh token en cookie httpOnly (docs/06 §3.2) — transporte web. En /auth/refresh y /auth/logout
+        la cookie es la fuente PRIMARIA del refresh; el body (aplicaciones móviles) sigue como alternativa.
+        El servidor también setea/limpia esta cookie en las respuestas (Set-Cookie).
+  parameters:
+    RefreshTokenCookie:
+      name: refresh_token
+      in: cookie
+      required: false
+      description: |
+        Cookie httpOnly de sesión web (docs/06 §3.2): tiene prioridad sobre el body (móvil) en
+        /auth/refresh y /auth/logout. La emiten register/login/google/magic-consume/refresh (Set-Cookie)
+        y la elimina el logout.
+      schema:
+        $ref: '#/components/schemas/RefreshToken'
   schemas:
     Email:
       type: string
@@ -619,8 +651,9 @@ components:
           $ref: '#/components/schemas/Password'
     RefreshRequest:
       type: object
-      required: [refreshToken]
+      required: []
       additionalProperties: false
+      description: Refresh token opcional — la cookie `refresh_token` (web) tiene prioridad si está presente (docs/06 §3.3).
       properties:
         refreshToken:
           $ref: '#/components/schemas/RefreshToken'
