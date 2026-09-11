@@ -11,15 +11,14 @@
  * sobre-ingeniería a este tamaño. Si el dominio crece, separar AQUÍ (p. ej. RefreshTokenRepository)
  * sin tocar ni la entidad ni los use cases: solo desacoplar el puerto y el constructor inyectado.
  */
-import type { Email, GoogleSub, Jti, PasswordHash, Provider, RefreshTokenStatus, Timestamp, UserId } from '../vo/index.js';
+import type { Email, FamilyId, GoogleSub, Jti, PasswordHash, Provider, RefreshTokenStatus, Timestamp, UserId } from '../vo/index.js';
 import type { User } from '../entity/user.js';
 
 export type InsertRefreshToken = {
   jti: Jti;
   tokenHash: string;
   userId: UserId;
-  /** decisión 2 (doc 04): en esta iteración family_id = user_id al emitir. */
-  familyId: UserId;
+  familyId: FamilyId;
   provider: Provider;
   expiresAt: Timestamp;
 };
@@ -39,6 +38,7 @@ export interface UserRepository {
     jti: Jti;
     tokenHash: string;
     userId: UserId;
+    familyId: FamilyId;
     provider: Provider;
     status: RefreshTokenStatus;
     expiresAt: Timestamp;
@@ -57,8 +57,10 @@ export interface UserRepository {
   markRefreshTokenUsed(tokenHash: string): Promise<void>;
   /** SET status = 'revoked' (logout soft-revoke, doc 04 → decisión 3). */
   revokeRefreshToken(tokenHash: string): Promise<void>;
-  /** Revoca TODA la familia del usuario (US-03 AC-03, doc 02 → diagrama 3). */
-  revokeFamily(userId: UserId): Promise<void>;
+  /** Revoca TODA la familia de refresh (sessionId). */
+  revokeFamily(familyId: FamilyId): Promise<void>;
+  /** Revoca TODOS los refresh del usuario (cambio/reset de password — F1). */
+  revokeAllForUser(userId: UserId): Promise<void>;
   /** SET email_verified = true (posesión de email probada vía magic link, doc 04 → decisión 5). */
   markEmailVerified(email: Email): Promise<void>;
   /** SET password_hash = nuevo (cambio de contraseña: US-11 change-password y US-12 reset vía magic link). */

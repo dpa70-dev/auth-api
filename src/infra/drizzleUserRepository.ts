@@ -6,7 +6,7 @@ import type {
   UserRepository,
 } from '../domain/port/index.js';
 import { refreshTokens, users } from '../db/schema.js';
-import { refreshTokenStatusSchema, type Email, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../domain/vo/index.js';
+import { refreshTokenStatusSchema, type Email, type FamilyId, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../domain/vo/index.js';
 import { UniqueConstraintViolation } from '../domain/uniqueConstraintViolation.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
@@ -26,6 +26,7 @@ const mapRefreshRow = (
   jti: Jti;
   tokenHash: string;
   userId: UserId;
+  familyId: FamilyId;
   provider: Provider;
   status: RefreshTokenStatus;
   expiresAt: Timestamp;
@@ -33,6 +34,7 @@ const mapRefreshRow = (
   jti: row.jti as Jti,
   tokenHash: row.tokenHash,
   userId: row.userId as UserId,
+  familyId: row.familyId as FamilyId,
   provider: row.provider as Provider,
   status: row.status,
   expiresAt: toIso(row.expiresAt),
@@ -107,9 +109,12 @@ export class DrizzleUserRepository implements UserRepository {
     this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
   }
 
-  async revokeFamily(userId: UserId): Promise<void> {
-    // familia = user_id (decisión 2, doc 04): revocar todos los refresh del usuario.
-    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.familyId, userId)).run();
+  async revokeFamily(familyId: FamilyId): Promise<void> {
+    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.familyId, familyId)).run();
+  }
+
+  async revokeAllForUser(userId: UserId): Promise<void> {
+    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.userId, userId)).run();
   }
 
   async markEmailVerified(email: Email): Promise<void> {
