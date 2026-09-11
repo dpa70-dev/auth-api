@@ -1,6 +1,6 @@
 # 04 · Modelo de Datos — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento.
+**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento.
 **Fuente**: doc 00 → ítems 15 (timestamps), 30-33 (SQLite/Drizzle/migraciones), 35 (argon2id), 38 (refresh hasheado + jti), 42 (logout), 44-47 (Google OIDC, `users` nullable); historias US-01, US-03, US-04, US-07, US-08; diagramas 3-4 del doc 02.
 **Cómo leer**: cada tabla traza columna a columna su origen en la sección [Trazabilidad](#trazabilidad-columna--fuente). Las decisiones que el modelo toma más allá de la literalidad del plan están explicadas en [Decisiones derivadas](#decisiones-derivadas).
 
@@ -66,12 +66,11 @@ CREATE TABLE refresh_tokens (
   jti        TEXT PRIMARY KEY,                                    -- identificador del refresh (VOs: Jti)
   token_hash TEXT NOT NULL UNIQUE,                                -- SHA-256 del refresh opaco
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  family_id  TEXT NOT NULL,                                       -- familia de rotación; en este diseño family_id = user_id
+  family_id  TEXT NOT NULL,                                       -- familia de rotación: UUID de sesión por login
   status     TEXT NOT NULL CHECK (status IN ('active', 'used', 'revoked')),
   provider   TEXT CHECK (provider IN ('local', 'google', 'magic')), -- origen de la sesión (informacional)
   expires_at TEXT NOT NULL,                                       -- vigencia 7-30 días (ISO 8601 UTC)
   created_at TEXT NOT NULL,                                       -- ISO 8601 UTC
-  FOREIGN KEY (family_id) REFERENCES users(id)
 ) STRICT;
 
 -- magic_links: enlaces de acceso sin contraseña (US-09/US-10) y de recuperación (US-12)
@@ -97,7 +96,8 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 |---|---|
 | `findByHash(sha256(refreshToken))` → `SELECT ... WHERE token_hash = ?` | `SELECT * FROM refresh_tokens WHERE token_hash = ?` |
 | `marcarUsado(refreshToken)` → `SET usado = 1` | `UPDATE refresh_tokens SET status = 'used' WHERE token_hash = ?` |
-| `revokeFamily(user.id)` → `SET revocado = 1 WHERE user_id = ?` | `UPDATE refresh_tokens SET status = 'revoked' WHERE family_id = ?` |
+| `revokeFamily(familyId)` → `SET revocado = 1 WHERE family_id = ?` | `UPDATE refresh_tokens SET status = 'revoked' WHERE family_id = ?` |
+| `revokeAllForUser(userId)` (F1 de US-11/US-12) → `SET revocado = 1 WHERE user_id = ?` | `UPDATE refresh_tokens SET status = 'revoked' WHERE user_id = ?` |
 | `revoke(refreshToken)` logout → `SET revocado = 1` (soft-revoke) | `UPDATE refresh_tokens SET status = 'revoked' WHERE token_hash = ?` |
 
 > El modelo elimina la colisión del borrado físico del doc 02 original (`DELETE FROM refresh_tokens`): si el refresh se borrara, presentarlo tras un logout sería un token «inexistente» y no podría disparar la revocación de familia que exige **US-04 AC-02**. `status = 'revoked'` conserva la fila y el reuso posterior sigue el camino del diagrama 3 (ver doc 02 → diagrama 4, nota de reconciliación).
@@ -124,8 +124,8 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 |---|---|
 | `jti` | doc 00 → nº 38 («guardado … con su jti»); US-03 (rotación por token) |
 | `token_hash` | doc 00 → nº 38 («guardado **hasheado** en DB»); US-03 AC-05 (**UNIQUE** derivado: `findByHash` exige búsqueda determinista por hash, diagrama 3) |
-| `user_id` | US-03 AC-03 (revocación por usuario/familia); diagrama 3 (`revokeFamily(user.id)`) |
-| `family_id` | US-03 AC-03 («revoca **toda la familia**»): en este diseño `family_id = user_id` al emitir (una familia por usuario); columna propia deja la puerta abierta a familias por dispositivo/sesión en iteraciones futuras (doc 01 → nº 161) |
+| `user_id` | US-03 AC-03 (revocación por usuario — cambio/reset de password, F1 de US-11/US-12); diagrama 3 (`revokeAllForUser(userId)`) |
+| `family_id` | US-03 AC-03 («revoca **toda la familia**»): UUID de **sesión** por login (una familia por sesión/dispositivo); la rotación hereda el family_id presentado; el reuso revoca SOLO esa familia (docs/06 §5) |
 | `status` | US-03 AC-02 (`used` tras rotar), US-04 AC-02 (`revoked` tras logout presenciado), US-03 AC-04 (revocado/vencido → 401). Un único enum evita estados imposibles (dos flags booleanos permitirían `usado=1 y revocado=1`) |
 | `provider` | doc 00 → nº 47 («sesiones de usuarios Google usan **nuestros** refresh»); informacional: permite estadísticas y políticas futuras por origen |
 | `expires_at` | doc 00 → nº 38 (vigencia 7-30 días); US-03 AC-04 (vencido → 401) |
@@ -150,7 +150,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | # | Decisión | Racional (fuente) |
 |---|---|---|
 | 1 | **`status` único** (`active`/`used`/`revoked`) en vez de dos flags `usado`+`revocado` | Los estados son mutuamente excluyentes: un refresh rotado ya no puede revocarse por reuso, un refresh revocado por logout no se vuelve a usar. Un CHECK evita el estado inválido `used AND revoked`, y el reuso se detecta por «fila en `used`/`revoked` presentada de nuevo» (US-04 AC-02, US-03 AC-03) |
-| 2 | **`family_id`** (no solo `user_id`) | US-03 AC-03 revoca la **familia** en reuso. Hoy `family_id = user_id` (una familia por usuario) pero la columna permite futuro multi-sesión (doc 01 → nº 161) sin migración de esquema |
+| 2 | **`family_id`** (no solo `user_id`) | US-03 AC-03 revoca la **familia** en reuso. `family_id` = **UUID de sesión** (uno por login); la rotación hereda el presentado. El reuso revoca SOLO esa familia → logouts independientes web/móvil (docs/06 §5). Cambio/reset de password revoca todas las familias del usuario vía `revokeAllForUser` |
 | 3 | **Logout = soft-revoke** (`status='revoked'`), nunca `DELETE` | Reconciliación de doc 00 → nº 42 («borrarlo de DB») con US-04 AC-02: borrar físicamente rompería la detección de reuso post-logout. El ítem 42 se interpreta como **borrado lógico** (ver tabla de correspondencia y nota del diagrama 4 en doc 02) |
 | 4 | **`google_sub UNIQUE`** | `findByGoogleSub` (diagrama 5) debe resolver un solo usuario; `UNIQUE` hace la colisión Google-Google imposible a nivel BD (análogo a US-01 AC-06 para email) |
 | 5 | **CHECK de identidad `users` ampliado** a `... OR email_verified = 1` | Un usuario solo-magic (creado por auto-cuenta en US-10 AC-02) no tiene `password_hash` ni `google_sub`; su email ya está verificado por posesión. Sin la ampliación, la CHECK original `(password_hash IS NOT NULL OR google_sub IS NOT NULL)` impediría persistir el alta implícita |
@@ -165,7 +165,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | Candidato | Decisión | Racional |
 |---|---|---|
 | `access_tokens` | ❌ No hay tabla | JWT stateless (doc 00 → nº 36-37): la validez la verifica la firma HS256 y `exp`, no la BD; revocación innecesaria con vida de 5-15 min |
-| `sessions` | ❌ No hay tabla | La «sesión» persiste como refresh token activo; listar sesiones por dispositivo es iteración futura (doc 01 → nº 161) y ya está soportado estructuralmente por `family_id` |
+| `sessions` | ❌ No hay tabla | La «sesión» persiste como refresh token activo agrupado por `family_id` (una familia = una sesión); listar sesiones por dispositivo es iteración futura (doc 01 → nº 161) |
 | `rate_limits` | ❌ No hay tabla | Rate limiting en memoria/aplicación (doc 00 → nº 41, 49), no persistente |
 | `google_refresh_tokens` | ❌ No hay tabla | Nunca se pide ni guarda el refresh de Google (doc 00 → nº 47); las sesiones Google usan nuestros `refresh_tokens` |
 | `email_verification_tokens` | ❌ No hay tabla (separada) | La verificación de email se resuelve con `magic_links` (US-09/10): el mismo enlace que autentica prueba la posesión del email (`email_verified = 1`). No hace falta una tabla independiente de confirmación de email |

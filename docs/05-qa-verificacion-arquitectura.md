@@ -99,12 +99,11 @@ Registrados durante el QA. Estado de cierre:
 
 Registrado tras el cierre, a raíz de la consulta "¿puede una misma cuenta usarse desde web y móvil?".
 
-- **Multi-frontend: sí, soportado por diseño.** El access token es stateless (JWT: firma + `exp` + `sub`); `refresh_tokens` admite **N filas por `user_id`** (cada login = una sesión con su familia); CORS por allowlist (`cfg.corsOrigins`; el móvil no aplica CORS). El mismo usuario puede estar logueado en web y móvil a la vez sin interferencia.
-- **Transporte implementado (100% Bearer/body):** access en `Authorization: Bearer` (middleware propio); refresh en el body de `/auth/refresh` y `/auth/logout`; CORS **sin** `credentials: true`. La API no lee cookies.
-- **Discrepancia doc-código detectada:** `docs/00` ítem 39 documentaba "SPA/web → cookie httpOnly + Secure + SameSite=Lax; móvil/CLI → Bearer", pero la implementación es Bearer-only para ambos. **Resuelto (01-sep-2026)**: se alineó el ítem 39 con la implementación — Bearer-only en toda la API (access en header, refresh en body, CORS sin `credentials: true`); el patrón cookie httpOnly queda registrado como evolución futura opcional.
-- **Granularidad de revocación:** `family_id = user_id` (doc 04, decisión 2) → logout/detección de reuso revocan **todas** las sesiones del usuario, no solo la del dispositivo. Correcto para el alcance actual; introducir familias reales si algún día se quiere "logout solo en este dispositivo".
+- **Multi-frontend: sí, soportado por diseño.** El access token es stateless (JWT: firma + `exp` + `sub`); `refresh_tokens` admite **N filas por `user_id`** (cada login = una sesión con su propia familia UUID); CORS por allowlist con `credentials: true` (`cfg.corsOrigins`; el móvil no aplica CORS). El mismo usuario puede estar logueado en web y móvil a la vez sin interferencia.
+- **Transporte implementado (dual, 11-sep-2026):** access en `Authorization: Bearer` (middleware propio, única fuente — nunca cookie); refresh con **emisión dual** — cookie httpOnly (`refresh_token`) + body en todas las respuestas que generan refresh; `/auth/refresh` y `/auth/logout` leen la cookie primero y el body después (`refreshToken` opcional en el contrato). CORS con `credentials: true`. CSRF mitigado por `SameSite=Lax` + `Content-Type: application/json`. (Actualiza el registro previo "100% Bearer/body" del 01-sep-2026.)
+- **Granularidad de revocación (11-sep-2026):** `family_id` = UUID de **sesión** (uno por login) → logout/detección de reuso revocan **solo la sesión del dispositivo**; la rotación hereda la familia. La revocación global por usuario (`revokeAllForUser`) queda restringida a cambio/reset de password (F1 de US-11/US-12). (Actualiza el registro previo `family_id = user_id` del 01-sep-2026.)
 
-Estado: tema tratado y registrado; discrepancia del ítem 39 **resuelta** (alineada con la implementación Bearer-only, 01-sep-2026). El detalle extenso de las recomendaciones (transporte por cliente y `family_id` por sesión) está en **`06-recomendaciones-transporte-multi-frontend.md`**.
+Estado: tema tratado y registrado; transporte dual y `family_id` por sesión **implementados** (11-sep-2026). El detalle extenso de las recomendaciones (transporte por cliente y `family_id` por sesión) está en **`06-recomendaciones-transporte-multi-frontend.md`**.
 
 ---
 
