@@ -8,6 +8,7 @@
  * Barrel puro: un archivo por VO (schema + tipo juntos en la misma unidad).
  */
 export * from './email.js';
+export * from './familyId.js';
 export * from './googleSub.js';
 export * from './jti.js';
 export * from './magicLinkPurpose.js';
