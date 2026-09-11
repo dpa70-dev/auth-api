@@ -13,8 +13,8 @@ export type ChangePasswordCommand = {
 
 /**
  * US-11: cambia la contraseña probando la actual (el reto de un secreto que ya se posee).
- * F1 (aprobado): el cambio derriba TODAS las sesiones del usuario (revokeFamily, familia = userId)
- * — compensa sesiones que quedaron emitidas bajo el secreto viejo; el cliente re-autentica.
+ * F1 (aprobado): el cambio derriba TODAS las sesiones del usuario (revokeAllForUser) —
+ * compensa sesiones que quedaron emitidas bajo el secreto viejo; el cliente re-autentica.
  */
 export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
   constructor(
@@ -49,7 +49,7 @@ export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
 
     const passwordHash = await this.hasher.hash(cmd.newPassword);
     await this.users.updatePasswordHash(user.id, passwordHash);
-    await this.users.revokeFamily(user.id);
+    await this.users.revokeAllForUser(user.id);
 
     this.logger.info(LOG_EVENTS.PASSWORD_CHANGED, { userId: user.id });
   }

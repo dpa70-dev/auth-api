@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
-import { userIdSchema, providerSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, userIdSchema, providerSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -84,6 +84,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
   ): Promise<LoginGoogleResult> {
     const session = await issueSession(this.tokens, this.users, {
       userId: user.id,
+      familyId: familyIdSchema.parse(randomUUID()),
       provider,
       refreshTtlDays,
       now,

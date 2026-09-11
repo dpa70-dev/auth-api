@@ -10,7 +10,7 @@ import type {
   UserRecord,
   UserRepository,
 } from '../../domain/port/index.js';
-import { providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -70,6 +70,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
 
     const session = await issueSession(this.tokens, this.users, {
       userId: id,
+      familyId: familyIdSchema.parse(randomUUID()),
       provider: providerSchema.enum.local,
       refreshTtlDays: cmd.refreshTtlDays,
       now,

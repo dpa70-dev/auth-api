@@ -36,8 +36,8 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
     if (!found) throw new ApiError(ErrorCodes.UNAUTHORIZED);
     if (found.status === refreshTokenStatusSchema.enum.revoked || found.status === refreshTokenStatusSchema.enum.used) {
       // REUSO (AC-03): el mismo refresh presentado dos veces → 401 idéntico Y revocar toda la familia.
-      await this.users.revokeFamily(found.userId);
-      this.logger.warn(LOG_EVENTS.REFRESH_REUSE_DETECTED, { userId: found.userId, jti: found.jti });
+      await this.users.revokeFamily(found.familyId);
+      this.logger.warn(LOG_EVENTS.REFRESH_REUSE_DETECTED, { familyId: found.familyId, jti: found.jti });
       throw new ApiError(ErrorCodes.UNAUTHORIZED);
     }
     if (isRefreshExpired(found.expiresAt, now)) {
@@ -48,6 +48,7 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
     await this.users.markRefreshTokenUsed(tokenHash);
     const session = await issueSession(this.tokens, this.users, {
       userId: found.userId,
+      familyId: found.familyId,
       provider: found.provider,
       refreshTtlDays: cmd.refreshTtlDays,
       now,

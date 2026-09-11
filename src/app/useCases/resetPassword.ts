@@ -83,7 +83,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     // Un solo uso: consumir invalida el link (patrón consume).
     await this.magicLinks.markUsed(tokenHash);
     // F1 (misma política que change-password): el reset derriba TODAS las sesiones del usuario.
-    await this.users.revokeFamily(user.id);
+    await this.users.revokeAllForUser(user.id);
 
     this.logger.info(LOG_EVENTS.PASSWORD_RESET_CONSUMED, { userId: user.id });
   }

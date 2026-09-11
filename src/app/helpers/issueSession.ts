@@ -1,9 +1,10 @@
 import type { TokenIssuer, UserRepository } from '../../domain/port/index.js';
-import type { Provider, UserId } from '../../domain/vo/index.js';
+import type { FamilyId, Provider, UserId } from '../../domain/vo/index.js';
 import { refreshExpiresAt } from '../../domain/refreshExpiry.js';
 
 export type IssueSessionInput = {
   userId: UserId;
+  familyId: FamilyId;
   provider: Provider;
   refreshTtlDays: number;
   now: Date;
@@ -24,7 +25,7 @@ export const issueSession = async (
     jti: refresh.jti,
     tokenHash,
     userId: input.userId,
-    familyId: input.userId,
+    familyId: input.familyId,
     provider: input.provider,
     expiresAt: refreshExpiresAt(input.now, input.refreshTtlDays),
   });

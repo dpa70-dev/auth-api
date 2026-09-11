@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, MagicLinkRepository, TokenIssuer, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -75,6 +75,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
 
     const session = await issueSession(this.tokens, this.users, {
       userId: user.id,
+      familyId: familyIdSchema.parse(randomUUID()),
       provider: providerSchema.enum.magic,
       refreshTtlDays: cmd.refreshTtlDays,
       now,
