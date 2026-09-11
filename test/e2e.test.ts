@@ -437,3 +437,122 @@ describe('Transversal — rate limit, requestId, envelope', () => {
     expect(error.requestId).toBe('req_cliente_01');
   });
 });
+
+describe('Transversal — transporte por cookie (docs/06 §3)', () => {
+  /** Extrae el valor de `refresh_token=` de un array Set-Cookie (formato de `headers.getSetCookie()`). */
+  const cookieValue = (setCookies: string[]): string | undefined =>
+    setCookies.find((c) => c.startsWith('refresh_token='))?.split(';')[0]?.slice('refresh_token='.length);
+
+  it('register/login setean cookie httpOnly y devuelven el par por body (emisión dual)', async () => {
+    const email = 'cookie1@example.com';
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email, password: 'contraseñaSegura123' });
+    const regCookies = reg.headers.getSetCookie();
+    const regCookie = regCookies.find((c) => c.startsWith('refresh_token='));
+    expect(regCookie).toBeDefined();
+    expect(regCookie).toContain('HttpOnly');
+    expect(regCookie).toContain('SameSite=Lax');
+    expect(regCookie).toContain('Path=/api/v1/auth');
+    expect(regCookie).not.toContain('Secure'); // test: nodeEnv no es production
+    const regBody = await readJson<{ data: AuthData }>(reg);
+    expect(regBody.data.refreshToken).toBeTruthy(); // emisión dual: el body también lo lleva
+
+    const log = await post(`${ctx.baseUrl}/auth/login`, { email, password: 'contraseñaSegura123' });
+    const logCookie = log.headers.getSetCookie().find((c) => c.startsWith('refresh_token='));
+    expect(logCookie).toBeDefined();
+    const logBody = await readJson<{ data: AuthData }>(log);
+    expect(logBody.data.refreshToken).toBeTruthy();
+  });
+
+  it('refresh SOLO con cookie (sin body) → 200 con par nuevo', async () => {
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email: 'cookie2@example.com', password: 'contraseñaSegura123' });
+    const refresh = cookieValue(reg.headers.getSetCookie());
+    expect(refresh).toBeDefined();
+
+    const res = await fetch(`${ctx.baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { cookie: `refresh_token=${refresh}` }, // sin body ni Content-Type
+    });
+    expect(res.status).toBe(200);
+    const { data } = await readJson<{ data: AuthData }>(res);
+    expect(data.accessToken).toMatch(/^eyJ/);
+    expect(data.refreshToken).not.toBe(refresh);
+  });
+
+  it('prioridad de cookie: cookie válida + body con token inválido → 200', async () => {
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email: 'cookie3@example.com', password: 'contraseñaSegura123' });
+    const refresh = cookieValue(reg.headers.getSetCookie());
+    expect(refresh).toBeDefined();
+
+    const res = await post(
+      `${ctx.baseUrl}/auth/refresh`,
+      { refreshToken: 'v4.local.token-inventado' },
+      { cookie: `refresh_token=${refresh}` },
+    );
+    expect(res.status).toBe(200); // la cookie manda, el body inválido se ignora
+  });
+
+  it('logout con cookie → 204 + cookie expirada; reuso de esa cookie → 401', async () => {
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email: 'cookie4@example.com', password: 'contraseñaSegura123' });
+    const refresh = cookieValue(reg.headers.getSetCookie());
+    expect(refresh).toBeDefined();
+
+    const out = await fetch(`${ctx.baseUrl}/auth/logout`, {
+      method: 'POST',
+      headers: { cookie: `refresh_token=${refresh}` },
+    });
+    expect(out.status).toBe(204);
+    const cleared = out.headers.getSetCookie().find((c) => c.startsWith('refresh_token='));
+    expect(cleared).toContain('Expires=Thu, 01 Jan 1970'); // la cookie expira en el navegador
+
+    const reuse = await fetch(`${ctx.baseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { cookie: `refresh_token=${refresh}` },
+    });
+    expect(reuse.status).toBe(401);
+    expect((await readJson<{ error: ErrorData }>(reuse)).error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('refresh/logout SIN cookie y SIN body → 401 UNAUTHORIZED, nunca 400 (anti-enumeración)', async () => {
+    const res = await fetch(`${ctx.baseUrl}/auth/refresh`, { method: 'POST' }); // req.body === undefined
+    expect(res.status).toBe(401);
+    const { error } = await readJson<{ error: ErrorData }>(res);
+    expect(error.code).toBe('UNAUTHORIZED');
+    expect(error.requestId).toMatch(/^req_/);
+
+    const out = await fetch(`${ctx.baseUrl}/auth/logout`, { method: 'POST' });
+    expect(out.status).toBe(401);
+  });
+
+  it('me con access en cookie y SIN Authorization → 401 idéntico al sin-token', async () => {
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email: 'cookie6@example.com', password: 'contraseñaSegura123' });
+    const { data } = await readJson<{ data: AuthData }>(reg);
+
+    const headers = { 'x-request-id': 'req_cookie_access' }; // mismo id: cuerpos comparables
+    const withCookie = await get(`${ctx.baseUrl}/auth/me`, undefined, {
+      ...headers,
+      cookie: `access_token=${data.accessToken}`,
+    });
+    const without = await get(`${ctx.baseUrl}/auth/me`, undefined, headers);
+    expect(withCookie.status).toBe(401);
+    expect(without.status).toBe(401);
+    const a = await readJson<{ error: ErrorData }>(withCookie);
+    const b = await readJson<{ error: ErrorData }>(without);
+    expect(a).toEqual(b); // idénticos: la cookie de access no abre ninguna puerta
+  });
+
+  it('independencia de familias: reuso de la 1ª sesión no afecta a la 2ª', async () => {
+    const email = 'cookie7@example.com';
+    const reg = await post(`${ctx.baseUrl}/auth/register`, { email, password: 'contraseñaSegura123' });
+    const { data: s1 } = await readJson<{ data: AuthData }>(reg);
+    const log = await post(`${ctx.baseUrl}/auth/login`, { email, password: 'contraseñaSegura123' });
+    const { data: s2 } = await readJson<{ data: AuthData }>(log);
+
+    const rot1 = await post(`${ctx.baseUrl}/auth/refresh`, { refreshToken: s1.refreshToken });
+    expect(rot1.status).toBe(200);
+    const reuse = await post(`${ctx.baseUrl}/auth/refresh`, { refreshToken: s1.refreshToken }); // reuso → revoca SOLO familia 1
+    expect(reuse.status).toBe(401);
+
+    const after = await post(`${ctx.baseUrl}/auth/refresh`, { refreshToken: s2.refreshToken }); // familia 2 intacta
+    expect(after.status).toBe(200);
+  });
+});
