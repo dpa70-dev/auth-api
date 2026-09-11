@@ -74,9 +74,8 @@ export const refreshTokens = sqliteTable(
     check('refresh_tokens_status_check', sql`${t.status} IN (${inList(refreshTokenStatusValues)})`),
     // doc 04 → refresh_tokens: CHECK derivado de providerValues
     check('refresh_tokens_provider_check', sql`${t.provider} IN (${inList(providerValues)})`),
-    // FK user_id y family_id → users.id (doc 04 → FK explícitas)
+    // FK user_id → users.id (doc 04 → FK explícita); family_id sin FK (la familia es una sesión)
     foreignKey({ columns: [t.userId], foreignColumns: [users.id] }).onDelete('cascade'),
-    foreignKey({ columns: [t.familyId], foreignColumns: [users.id] }).onDelete('cascade'),
   ],
 );
 
