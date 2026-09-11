@@ -13,6 +13,7 @@ import { PinoLogger, requestContext } from './infra/pinoLogger.js';
 import { apiRouter } from './api/routes.js';
 import { httpLoggerConfig, requestIdMiddleware } from './api/middlewares/middleware.js';
 import { finalErrorHandler, notFound } from './api/middlewares/errorMiddleware.js';
+import cookieParser from 'cookie-parser';
 
 // Permite inyectar dependencias externas (útil en tests). Delega en composeInfra infra/compose.ts.
 export type AppDeps = ComposeOverrides;
@@ -24,13 +25,14 @@ export const buildApp = (overrides: AppDeps = {}) => {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: config.corsOrigins }));
+  app.use(cors({ origin: config.corsOrigins, credentials: true }));
 
   // Logging por request (pino-http) y propagación del requestId — defs en api/middlewares/middleware.ts.
   app.use(pinoHttp(httpLoggerConfig(new PinoLogger(config.nodeEnv).raw)));
   app.use(requestIdMiddleware(requestContext));
 
   app.use(express.json({ limit: '16kb' }));
+  app.use(cookieParser());
 
   app.use(API_PREFIX, apiRouter(useCases, { tokens, config }));
   app.use(API_PREFIX, notFound);
