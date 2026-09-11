@@ -1,0 +1,1 @@
+T7 OK — issueSession familyId por sesión (familyIdSchema.parse(randomUUID())); login/register/google/magic emiten; refresh hereda found.familyId y reuso revoca found.familyId.

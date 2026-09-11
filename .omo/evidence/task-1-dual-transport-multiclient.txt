@@ -1,0 +1,1 @@
+T1 OK — src/index.ts: cookieParser() montado tras express.json + cors({credentials:true}). Gates: typecheck ✓ lint ✓. Comportamiento: 100/100 tests.

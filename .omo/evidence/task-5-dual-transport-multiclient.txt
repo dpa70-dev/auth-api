@@ -1,0 +1,1 @@
+T5 OK — schema.ts sin FK family_id→users; db:generate → migrations/0003_cloudy_lucky_pierre.sql; db:migrate aplicada.

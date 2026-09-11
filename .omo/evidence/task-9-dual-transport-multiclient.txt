@@ -1,0 +1,1 @@
+T9 OK — docs/03-openapi.yaml: cookieAuth scheme, RefreshRequest.refreshToken?, refresh/logout requestBody opcional + cookie params; npm run contract exit 0; contract.ts cookie tipada.

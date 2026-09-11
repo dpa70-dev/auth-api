@@ -1,0 +1,1 @@
+T4 OK — src/domain/vo/familyId.ts (z.uuid invalid_family_id) + export en barrel. typecheck ✓ lint ✓.

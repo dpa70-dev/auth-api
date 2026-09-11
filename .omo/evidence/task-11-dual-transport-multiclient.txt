@@ -1,0 +1,1 @@
+T11 OK — 7 casos cookie en e2e (emisión dual, cookie-first, prioridad, logout+reuso 401, sin fuente 401, access-cookie 401, independencia familias). Total: 100/100.

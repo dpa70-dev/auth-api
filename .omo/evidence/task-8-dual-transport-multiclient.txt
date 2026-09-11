@@ -1,0 +1,1 @@
+T8 OK — schemas.ts refreshToken opcional; authHandlers Set-Cookie en register/login/google/refresh, clear en logout, cookie→body (readRefreshCookie ?? body, safeParse); magic-consume Set-Cookie.

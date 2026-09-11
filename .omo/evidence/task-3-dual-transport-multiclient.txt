@@ -1,0 +1,1 @@
+T3 OK — src/api/cookies.ts: REFRESH_COOKIE + set/clear/readRefreshCookie. smoke set: httpOnly, sameSite lax, path /api/v1/auth, maxAge=ttl; read sin cookies → undefined.

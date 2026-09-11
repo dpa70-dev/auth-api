@@ -1,0 +1,1 @@
+T10 OK — docs/00 ítem 39, docs/04 (family_id UUID sesión + FK fuera + revokeAllForUser), docs/05 §11, docs/06 (§2,3,5,6,7) alineados con la implementación.
