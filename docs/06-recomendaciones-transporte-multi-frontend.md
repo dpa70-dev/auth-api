@@ -14,9 +14,9 @@
 
 Este documento responde a tres preguntas que surgen al integrar la API desde distintos clientes:
 
-1. **¿Cómo se autentica un cliente contra la API hoy?** → `Authorization: Bearer` para el access token; el refresh token viaja en el body de `/auth/refresh` y `/auth/logout`. Sin cookies. (Sección 2.)
+1. **¿Cómo se autentica un cliente contra la API hoy?** → `Authorization: Bearer` para el access token; el refresh viaja por **cookie httpOnly `refresh_token` (web)** y por el **body** de `/auth/refresh` y `/auth/logout` (móvil) — emisión dual, lectura cookie-first. (Sección 2.)
 2. **¿Cuál es la mejor forma de autenticar una app web (SPA)?** → Access token en `Authorization: Bearer` (guardado en memoria), refresh token en **cookie httpOnly + Secure + SameSite=Lax**. (Sección 3.)
-3. **¿Cómo se atiende al mismo usuario desde varios frontends a la vez (web + móvil) con sesiones y logouts independientes?** → El modelo de datos debe usar **un `family_id` por sesión**, no uno por usuario. (Sección 5.)
+3. **¿Cómo se atiende al mismo usuario desde varios frontends a la vez (web + móvil) con sesiones y logouts independientes?** → El modelo de datos usa **un `family_id` por sesión** (UUID por login), no uno por usuario. (Sección 5.)
 
 La lectura recomendada es: secciones 2 (qué hay), 3 y 4 (qué hacer según cliente) y 5 (qué hacer si hay múltiples frontends).
 
@@ -183,7 +183,7 @@ La rotación del refresh (refresh → par nuevo)  →  mantiene el MISMO family_
 
 ### 5.4 Alternativa deliberada (por qué no logout global)
 
-Si el producto quisiera **una sola sesión activa por usuario** (el nuevo login invalida los anteriores), sería suficiente revocar por `user_id` — pero esa semántica es la que **no** se elegía aquí: el diseño actual permite coexisten sesiones en paralelo (web + móvil) con cierre independiente, que es el caso del transporte multi-frontend que motiva este documento.
+Si el producto quisiera **una sola sesión activa por usuario** (el nuevo login invalida los anteriores), sería suficiente revocar por `user_id` — pero esa semántica es la que **no** se eligió aquí: el diseño actual permite que coexistan sesiones en paralelo (web + móvil) con cierre independiente, que es el caso del transporte multi-frontend que motiva este documento.
 
 ---
 
