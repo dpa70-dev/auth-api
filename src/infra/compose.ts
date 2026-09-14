@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
-import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository } from '../domain/port/index.js';
+import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, UnitOfWork } from '../domain/port/index.js';
 import { Argon2PasswordHasher } from './argon2PasswordHasher.js';
 import { CompositeCompromisedPasswordChecker } from './compositeCompromisedPasswordChecker.js';
 import { HibpCompromisedPasswordChecker } from './hibpCompromisedPasswordChecker.js';
@@ -14,6 +14,7 @@ import { DrizzleMagicLinkRepository } from './drizzleMagicLinkRepository.js';
 import { ConsoleEmailSender } from './consoleEmailSender.js';
 import { GoogleIdTokenVerifierJose } from './googleJwtVerifier.js';
 import { PinoLogger } from './pinoLogger.js';
+import { SqliteUnitOfWork } from './sqliteUnitOfWork.js';
 
 import type { PasswordHasher, TokenIssuer, UserRepository } from '../domain/port/index.js';
 
@@ -24,6 +25,7 @@ export type ComposeOverrides = {
   logger?: Logger;
   magicLinks?: MagicLinkRepository;
   sender?: EmailSender;
+  unitOfWork?: UnitOfWork;
   /** Fake del screen de filtraciones (tests) — por defecto HIBP real. */
   compromised?: CompromisedPasswordChecker;
 };
@@ -36,6 +38,8 @@ export type InfraPorts = {
   magicLinks: MagicLinkRepository;
   sender: EmailSender;
   compromised: CompromisedPasswordChecker;
+  /** Unit of Work (doc 13 → §13.1): transacción atómica de escrituras. */
+  unitOfWork: UnitOfWork;
   logger: Logger;
   close: () => void;
 };
@@ -72,6 +76,7 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
     : cfg.google.clientId !== undefined
       ? new GoogleIdTokenVerifierJose(cfg.google.clientId, cfg.google.issuer, cfg.google.jwksUrl)
       : null;
+  const unitOfWork = overrides.unitOfWork ?? new SqliteUnitOfWork(sqlite);
 
-  return { users, hasher, tokens, google, magicLinks, sender, compromised, logger, close: () => sqlite.close() };
+  return { users, hasher, tokens, google, magicLinks, sender, compromised, unitOfWork, logger, close: () => sqlite.close() };
 };

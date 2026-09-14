@@ -6,6 +6,7 @@ import type {
   MagicLinkRepository,
   PasswordHasher,
   TokenIssuer,
+  UnitOfWork,
   UserRepository,
 } from '../domain/port/index.js';
 
@@ -33,6 +34,8 @@ export type Ports = {
   compromised: CompromisedPasswordChecker;
   /** null ⇔ el verifier de Google no está disponible (ver GUIID en compose). */
   google: GoogleIdTokenVerifier | null;
+  /** Unit of Work (doc 13 → §13.1): los UCs transaccionales envuelven sus escrituras atómicamente. */
+  unitOfWork: UnitOfWork;
 };
 
 export type UseCases = {
@@ -55,17 +58,17 @@ export type UseCases = {
  * en infra, que solo instancia implementaciones externas. La sesión se ensambla en index.ts.
  */
 export const buildUseCases = (
-  { users, hasher, tokens, magicLinks, sender, compromised, google }: Ports,
+  { users, hasher, tokens, magicLinks, sender, compromised, google, unitOfWork }: Ports,
   logger: Logger,
 ): UseCases => ({
-  registerUser: new RegisterUser(users, hasher, compromised, tokens, logger),
+  registerUser: new RegisterUser(users, hasher, compromised, tokens, unitOfWork, logger),
   login: new Login(users, hasher, tokens, logger),
   refreshTokens: new RefreshTokens(users, tokens, logger),
   logout: new Logout(users, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
-  consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, logger),
+  consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, unitOfWork, logger),
   me: new GetMe(users, logger),
   changePassword: new ChangePassword(users, hasher, compromised, logger),
-  resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, logger),
+  resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, unitOfWork, logger),
   loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger),
 });

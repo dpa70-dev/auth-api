@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, type PlainPassword } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -24,11 +24,13 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     private readonly hasher: PasswordHasher,
     private readonly compromised: CompromisedPasswordChecker,
     private readonly tokens: TokenIssuer,
+    private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
   ) {}
 
   async execute(cmd: ResetPasswordCommand): Promise<void> {
     const now = cmd.now ?? new Date();
+    // Hashing del token FUERA de la tx (doc 13 → §13.1): crypto nunca dentro de BEGIN/COMMIT.
     const tokenHash = await this.tokens.hashRefreshToken(cmd.token);
     const found = await this.magicLinks.findByTokenHash(tokenHash);
 
@@ -57,34 +59,36 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
       });
     }
 
+    // Crypto (argon2) FUERA de la tx (doc 13 → §13.1).
     const passwordHash = await this.hasher.hash(cmd.newPassword);
 
-    let user = await this.users.findByEmail(found.email);
-    if (user) {
-      // Existe (local, solo-Google o mixta): el enlace prueba la posesión del email → se reemplaza/se asigna la contraseña.
-      await this.users.updatePasswordHash(user.id, passwordHash);
-    } else {
-      // F2 (aprobado): email aún no registrado → auto-cuenta local, email probado por el enlace (coherente US-10).
-      const id = userIdSchema.parse(randomUUID());
-      await this.users.createUser({
-        id,
-        email: found.email,
-        passwordHash,
-        googleSub: null,
-        emailVerified: true,
-        createdAt: now.toISOString(),
-      });
-      user = await this.users.findById(id);
-      this.logger.info(LOG_EVENTS.PASSWORD_RESET_REGISTERED, { userId: id });
-    }
-    // Guard defensivo: si no hay usuario (ni creación), fallo genérico (nunca `!`).
-    if (!user) throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
+    const user = await this.users.findByEmail(found.email);
+    const userId = user ? user.id : userIdSchema.parse(randomUUID());
 
-    // Un solo uso: consumir invalida el link (patrón consume).
-    await this.magicLinks.markUsed(tokenHash);
-    // F1 (misma política que change-password): el reset derriba TODAS las sesiones del usuario.
-    await this.users.revokeAllForUser(user.id);
+    // Escrituras atómicas (doc 13 → §13.1): asignar hash + consumo del link + revocación total de
+    // sesiones. Un fallo a mitad deja la BD intacta (ROLLBACK) — el hash nunca queda "huérfano".
+    await this.unitOfWork.withTransaction(async () => {
+      if (user) {
+        // Existe (local, solo-Google o mixta): el enlace prueba la posesión del email → se reemplaza/se asigna la contraseña.
+        await this.users.updatePasswordHash(userId, passwordHash);
+      } else {
+        // F2 (aprobado): email aún no registrado → auto-cuenta local, email probado por el enlace (coherente US-10).
+        await this.users.createUser({
+          id: userId,
+          email: found.email,
+          passwordHash,
+          googleSub: null,
+          emailVerified: true,
+          createdAt: now.toISOString(),
+        });
+        this.logger.info(LOG_EVENTS.PASSWORD_RESET_REGISTERED, { userId });
+      }
+      // Un solo uso: consumir invalida el link (patrón consume).
+      await this.magicLinks.markUsed(tokenHash);
+      // F1 (misma política que change-password): el reset derriba TODAS las sesiones del usuario.
+      await this.users.revokeAllForUser(userId);
+    });
 
-    this.logger.info(LOG_EVENTS.PASSWORD_RESET_CONSUMED, { userId: user.id });
+    this.logger.info(LOG_EVENTS.PASSWORD_RESET_CONSUMED, { userId });
   }
 }
