@@ -7,12 +7,13 @@ import type {
   Logger,
   PasswordHasher,
   TokenIssuer,
+  UnitOfWork,
   UserRecord,
   UserRepository,
 } from '../../domain/port/index.js';
 import { familyIdSchema, providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { issueSession } from '../helpers/issueSession.js';
+import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type RegisterUserCommand = {
@@ -34,6 +35,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     private readonly hasher: PasswordHasher,
     private readonly compromised: CompromisedPasswordChecker,
     private readonly tokens: TokenIssuer,
+    private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
   ) {}
 
@@ -53,27 +55,34 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     const existing = await this.users.findByEmail(cmd.email);
     if (existing) throw collisionError(existing);
 
+    // Crypto (argon2) FUERA de la tx (doc 13 → §13.1): llamadas lentas nunca dentro de BEGIN/COMMIT.
     const passwordHash = await this.hasher.hash(cmd.password);
-    try {
-      await this.users.createUser({
-        id,
-        email: cmd.email,
-        passwordHash,
-        googleSub: null,
-        emailVerified: false,
-        createdAt: now.toISOString(),
-      });
-    } catch (err) {
-      if (err instanceof UniqueConstraintViolation) throw collisionError(existing);
-      throw err;
-    }
 
-    const session = await issueSession(this.tokens, this.users, {
+    // Sesión (jose) FUERA de la tx — solo se persiste el refresh row dentro de la transacción.
+    const session = await generateSession(this.tokens, {
       userId: id,
       familyId: familyIdSchema.parse(randomUUID()),
       provider: providerSchema.enum.local,
       refreshTtlDays: cmd.refreshTtlDays,
       now,
+    });
+
+    // Escrituras atómicas (doc 13 → §13.1): usuario + refresh token se crean juntos o no se crea ninguno.
+    await this.unitOfWork.withTransaction(async () => {
+      try {
+        await this.users.createUser({
+          id,
+          email: cmd.email,
+          passwordHash,
+          googleSub: null,
+          emailVerified: false,
+          createdAt: now.toISOString(),
+        });
+      } catch (err) {
+        if (err instanceof UniqueConstraintViolation) throw collisionError(existing);
+        throw err;
+      }
+      await this.users.insertRefreshToken(session.refreshRow);
     });
 
     this.logger.info(LOG_EVENTS.USER_REGISTERED, { userId: id, provider: providerSchema.enum.local });

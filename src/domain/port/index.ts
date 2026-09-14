@@ -13,4 +13,5 @@ export * from './logger.js';
 export * from './magicLinkRepository.js';
 export * from './passwordHasher.js';
 export * from './tokenIssuer.js';
+export * from './unitOfWork.js';
 export * from './userRepository.js';

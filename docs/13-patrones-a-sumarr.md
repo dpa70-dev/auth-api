@@ -9,7 +9,7 @@ Los patrones de esta guía se estudian en las fuentes de referencia habituales: 
 
 | # | Patrón canónico | Problema que resuelve | Esfuerzo | Dónde aplica |
 |---|---|---|---|---|
-| 13.1 | Unit of Work | Atomicidad en use cases multi-escritura | Bajo | `registerUser`, `consumeMagicLink`, `resetPassword` |
+| 13.1 | Unit of Work | Atomicidad en use cases multi-escritura | Bajo | `registerUser`, `consumeMagicLink`, `resetPassword` ✅ implementado (14-sep-2026) |
 | 13.2 | Wrapper / Template Method (`asyncHandler`) | Esqueleto repetido en los 10 handlers | Muy bajo | `src/api/handlers/*` |
 | 13.3 | Transactional Outbox | Emails fiables cuando llegue un SMTP real | Medio | `EmailSender` + `requestMagicLink` / `resetPassword` |
 | 13.4 | Domain Events (Observer) | Efectos secundarios múltiples (auditoría, alertas, métricas) | Medio | `src/app/useCases/*` → publisher + suscriptores |
@@ -19,6 +19,8 @@ Los patrones de esta guía se estudian en las fuentes de referencia habituales: 
 ---
 
 ## 13.1 — Unit of Work: atomicidad en use cases multi-escritura
+
+> **Estado: implementado (14-sep-2026)** — puerto `UnitOfWork` en `src/domain/port/unitOfWork.ts`, adaptador `SqliteUnitOfWork` en `src/infra/sqliteUnitOfWork.ts` y wiring en `compose.ts`/`buildUseCases.ts`. Los UCs transaccionales (`RegisterUser`, `ConsumeMagicLink`, `ResetPassword`) generan el material crypto **fuera** de la tx (`generateSession`/hasher/compromised) y envuelven solo sus escrituras con `unitOfWork.withTransaction`. Test de commit/rollback: `test/unitOfWork.test.ts`.
 
 ### Problema
 
@@ -39,11 +41,11 @@ Exponer la transacción **como un puerto** (para no filtrar SQL a la capa applic
 ```ts
 // domain/port/unitOfWork.ts
 export interface UnitOfWork {
-  withTransaction<T>(fn: (repos: TransactionalRepos) => Promise<T>): Promise<T>;
+  withTransaction<T>(fn: () => Promise<T>): Promise<T>;
 }
 ```
 
-`fn` recibe repositorios "transaccionales" (mismas interfaces, mismas firmas) y el puerto se encarga de `BEGIN` / `COMMIT` / `ROLLBACK`. `issueSession` debe recibir el repositorio de la transacción, no el global — por eso la recomendación es que `withTransaction` **entregue** las instancias en lugar de que el use case pida la transacción por su cuenta.
+**Decisión de implementación (14-sep-2026)**: con better-sqlite3 (driver síncrono, UNA conexión), la transacción es de **alcance de conexión** — `BEGIN` abarca a todos los repos que operan sobre esa conexión, que son los mismos ya inyectados en el use case. Por eso `fn` no recibe repos "transaccionales" (serían las mismas instancias — un no-op): los UCs envuelven sus escrituras con el `unitOfWork` que ya tienen inyectado. `generateSession` (jose, fuera de la tx) entrega el `refreshRow`; el insert del refresh va dentro. Ver `src/domain/port/unitOfWork.ts` y `src/infra/sqliteUnitOfWork.ts`.
 
 ```mermaid
 sequenceDiagram
@@ -289,7 +291,7 @@ flowchart LR
 | Paso | Patrón | Por qué primero |
 |---|---|---|
 | 1 | 13.2 `asyncHandler` | Esfuerzo mínimo, elimina repetición estructural en cada cambio futuro |
-| 2 | 13.1 Unit of Work | Corrige el riesgo de consistencia de 13.x — toca use cases ya escritos |
+| 2 | 13.1 Unit of Work | Corrige el riesgo de consistencia de 13.x — toca use cases ya escritos ✅ implementado (14-sep-2026) |
 | 3 | 12.1 familia por sesión | Corrección de seguridad/UX de mayor impacto del doc 12 |
 | 4 | 13.5 Circuit Breaker + timeout de Google | Bajo esfuerzo, protege una ruta con dependencia externa |
 | 5 | 12.3 Null Object (Google) | Simplifica el transporte una vez que el doc 13.5 ya encapsula al verifier |

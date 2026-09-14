@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, MagicLinkRepository, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { Logger, MagicLinkRepository, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
-import { issueSession } from '../helpers/issueSession.js';
+import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type ConsumeMagicLinkCommand = {
@@ -24,11 +24,13 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
     private readonly users: UserRepository,
     private readonly magicLinks: MagicLinkRepository,
     private readonly tokens: TokenIssuer,
+    private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
   ) {}
 
   async execute(cmd: ConsumeMagicLinkCommand): Promise<ConsumeMagicLinkResult> {
     const now = cmd.now ?? new Date();
+    // Hashing del token FUERA de la tx (doc 13 → §13.1): crypto nunca dentro de BEGIN/COMMIT.
     const tokenHash = await this.tokens.hashRefreshToken(cmd.token);
     const found = await this.magicLinks.findByTokenHash(tokenHash);
 
@@ -50,42 +52,46 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
       throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
     }
 
-    let user = await this.users.findByEmail(found.email);
-    if (user) {
-      await this.users.markEmailVerified(found.email);
-    } else {
-      // Auto-cuenta (US-10): el clic en el link prueba la posesión del email → emailVerified=true.
-      const id = userIdSchema.parse(randomUUID());
-      await this.users.createUser({
-        id,
-        email: found.email,
-        passwordHash: null,
-        googleSub: null,
-        emailVerified: true,
-        createdAt: now.toISOString(),
-      });
-      user = await this.users.findById(id);
-      this.logger.info(LOG_EVENTS.USER_REGISTERED_VIA_MAGIC_LINK, { userId: id });
-    }
-    // Guard defensivo: si no hay usuario (ni creación), fallo genérico (nunca `!`).
-    if (!user) throw new ApiError(ErrorCodes.MAGIC_LINK_INVALID);
+    // Estado actual fuera de la tx; las escrituras que dependen de él se ejecutan de forma atómica.
+    const user = await this.users.findByEmail(found.email);
+    const userId = user ? user.id : userIdSchema.parse(randomUUID());
 
-    // Un solo uso: consumir invalida el link.
-    await this.magicLinks.markUsed(tokenHash);
-
-    const session = await issueSession(this.tokens, this.users, {
-      userId: user.id,
+    // Sesión (jose) FUERA de la tx — la persistencia del refresh row va dentro de la transacción.
+    const session = await generateSession(this.tokens, {
+      userId,
       familyId: familyIdSchema.parse(randomUUID()),
       provider: providerSchema.enum.magic,
       refreshTtlDays: cmd.refreshTtlDays,
       now,
     });
 
-    this.logger.info(LOG_EVENTS.MAGIC_LINK_CONSUMED, { userId: user.id });
+    // Escrituras atómicas (doc 13 → §13.1): crear/verificar usuario + consumo del link + refresh
+    // token. Un fallo a mitad deja la BD intacta (ROLLBACK).
+    await this.unitOfWork.withTransaction(async () => {
+      if (user) {
+        await this.users.markEmailVerified(found.email);
+      } else {
+        // Auto-cuenta (US-10): el clic en el link prueba la posesión del email → emailVerified=true.
+        await this.users.createUser({
+          id: userId,
+          email: found.email,
+          passwordHash: null,
+          googleSub: null,
+          emailVerified: true,
+          createdAt: now.toISOString(),
+        });
+        this.logger.info(LOG_EVENTS.USER_REGISTERED_VIA_MAGIC_LINK, { userId });
+      }
+      // Un solo uso: consumir invalida el link.
+      await this.magicLinks.markUsed(tokenHash);
+      await this.users.insertRefreshToken(session.refreshRow);
+    });
+
+    this.logger.info(LOG_EVENTS.MAGIC_LINK_CONSUMED, { userId });
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id: user.id, email: user.email, createdAt: user.createdAt },
+      user: { id: userId, email: user ? user.email : found.email, createdAt: user ? user.createdAt : now.toISOString() },
     };
   }
 }
