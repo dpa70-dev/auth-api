@@ -89,7 +89,7 @@ Registrados durante el QA. Estado de cierre:
 
 ## 10. Cierre del QA (estado al 31-ago-2026)
 
-- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓.
+- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓. *(Conteo al cierre del 31-ago-2026; el estado vigente del repo es `vitest` **101/101** en 10 archivos — ver §15.)*
 - De los pendientes del tintero: **los 4 resueltos** — #1 (`GOOGLE_ISSUER` en `.env.example`), #2 (canal Swagger → editor.swagger.io), #3 (fallback `iat`/`exp`) y #4 (nonce anti-replay condicional + typo `verifyyy`).
 - Greps de referencia cruzada confirman: **0** referencias residuales a lo eliminado, **0** re-exports de tipos ajenos en las capas, dominio autónomo (0 imports hacia artefactos externos).
 
@@ -184,4 +184,4 @@ Implementación completa del flujo de magic link (US-09/US-10) siguiendo el plan
 - CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5) y CHECK de `provider` ampliado a `magic` — el alta implícita de auto-cuenta es persistible.
 - `ConsumeMagicLink` reutiliza `TokenIssuer.issueSession` (misma emisión/rotación que `/login` y `/google`); las sesiones magic usan nuestros refresh (doc 00 → ítem 47).
 
-**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓.
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓. *(Conteo al 3-sep-2026; el estado vigente del repo es `vitest` **101/101** en 10 archivos — transporte dual, rate limiting global, tipado contra contrato: ver docs/05 §11, docs/08 y commit `1c2b8ef`/`b526789`.)*
