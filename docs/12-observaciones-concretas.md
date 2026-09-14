@@ -7,27 +7,31 @@
 
 | # | Observación | Escenario de fallo | Riesgo | Referencia |
 |---|---|---|---|---|
-| 12.1 | `familyId = userId` colapsa todas las sesiones en una familia | Reuso accidental de un refresh tras timeout de red | Logout global multi-dispositivo | `src/app/helpers/issueSession.ts:27` · `src/app/useCases/refreshTokens.ts:39` |
+| 12.1 | ~~`familyId = userId` colapsa todas las sesiones en una familia~~ **RESUELTO** (11-sep-2026): familia = UUID de sesión por login | ~~Logout global multi-dispositivo~~ Revocación por sesión | Contenido por sesión (commit `8788e90`) | `issueSession.ts:28` · `refreshTokens.ts:39` · docs/05 §11 · doc 04 → decisión 2 |
 | 12.2 | Consumo de magic link no idempotente | Reintento o pre-lectura del mail tras un consumo exitoso | Operación exitosa percibida como fallida (401) | `src/app/useCases/consumeMagicLink.ts:38` |
 | 12.3 | `loginGoogle: LoginGoogle \| null` filtra nulabilidad al transporte | Google no configurado en el deployment | Handler con null-check defensivo en la frontera | `src/app/buildUseCases.ts:67` · `src/api/handlers/authHandlers.ts:82` |
 
-Ninguna es un bug en el sentido clásico: son decisiones de diseño que hoy funcionan en el caso feliz, pero cuyo costo aparece en escenarios de red real (reintentos), de ecosistema (pre-lectores de mail) o de configuración (deployments sin Google). Las tres son baratas de corregir con el patrón correcto.
+Ninguna es un bug en el sentido clásico: son decisiones de diseño que funcionan en el caso feliz, pero cuyo costo aparece en escenarios de red real (reintentos), de ecosistema (pre-lectores de mail) o de configuración (deployments sin Google). **12.1 ya está resuelto** (11-sep-2026: familia = UUID de sesión — commit `8788e90`); se conserva la sección como registro de la motivación y del resultado. Las otras dos son baratas de corregir con el patrón correcto.
 
 ---
 
-## 12.1 — `familyId = userId`: una familia por usuario revoca todas las sesiones
+## 12.1 — ~~`familyId = userId`: una familia por usuario revoca todas las sesiones~~ → RESUELTA: familia = sesión
 
-### Ubicación
+**Estado: RESUELTA (11-sep-2026)** — `family_id` es un UUID de **sesión** por login (commit `8788e90`), la rotación hereda la familia presentada y el reuso revoca **solo** esa sesión. La sección documenta el riesgo original (por qué se cambió) y cómo quedó resuelto.
 
-- `src/app/helpers/issueSession.ts:27` → todo refresh token se crea con `familyId: input.userId`.
-- `src/app/useCases/refreshTokens.ts:37-41` → ante reuso (status `used`/`revoked`), `revokeFamily(found.userId)`.
-- Como `familyId === userId`, `revokeFamily(userId)` **no revoca un grupo de tokens: revoca el usuario completo**.
+### Ubicación (original, pre-corrección)
 
-### Por qué es un riesgo real, no teórico
+- `src/app/helpers/issueSession.ts:27` → todo refresh token se creaba con `familyId: input.userId`.
+- `src/app/useCases/refreshTokens.ts:37-41` → ante reuso (status `used`/`revoked`), se llamaba `revokeFamily(found.userId)`.
+- Como `familyId === userId`, `revokeFamily(userId)` **no revocaba un grupo de tokens: revocaba el usuario completo**. Hoy revoca `found.familyId` (la sesión; `refreshTokens.ts:39`) y `issueSession` recibe `familyId` propio (`issueSession.ts:28`).
+
+### Por qué era un riesgo real, no teórico
 
 El flujo de rotación asume que el cliente recibe de forma confiable el par nuevo (`v2`) antes de volver a usar el viejo. En redes reales eso no se cumple: un móvil que pierde la respuesta del `POST /auth/refresh` reintenta con `v1` — el único token que tiene a mano. Desde la perspectiva del servidor, ese reintento es **indistinguible de un ataque de reuso** (es exactamente la señal que OWASP manda a detectar), así que revoca la familia.
 
 El problema es la *amplitud* de la revocación: al ser la familia el usuario entero, un único reintento de un dispositivo **mata las sesiones de todos los demás**. El reuso deja de ser un mecanismo de contención y se convierte en un arma de denegación de servicio: un atacante que robe un solo refresh token puede forzar el logout global de la víctima en todos sus dispositivos.
+
+El siguiente diagrama muestra el flujo **pre-corrección** que producía el logout global:
 
 ```mermaid
 sequenceDiagram
@@ -44,34 +48,34 @@ sequenceDiagram
     Note over A,API: timeout de red — A nunca recibe v2
     A->>API: 5. reintento con v1 (el único token que posee)
     API->>DB: 6. findByRefreshTokenHash(v1) → status=used
-    API->>DB: 7. REUSO detectado → revokeFamily(userId)
-    Note over DB: familyId == userId ⇒ se revoca la familia ENTERA:<br/>también el refresh de B (sesión desktop)
+    API->>DB: 7. REUSO detectado → revokeFamily(familyId) — ANTES: familyId = userId
+    Note over DB: ANTES familyId == userId ⇒ se revocaba la familia ENTERA:<br/>también el refresh de B (sesión desktop).<br/>HOY revoca solo la sesión de A
     API-->>A: 8. 401 UNAUTHORIZED (genérico, anti-enumeración)
-    B->>API: 9. B intenta refrescar con su token → ya está revoked
-    API-->>B: 10. 401 UNAUTHORIZED — sesión desktop caída
+    B->>API: 9. B intenta refrescar con su token → ya está revoked (ANTES) / sigue vivo (HOY)
+    API-->>B: 10. 401 UNAUTHORIZED — sesión desktop caída (ANTES)
 ```
 
 > Figura 12.1 · Versión estática: [`12-figura1-reuso-familia.svg`](12-figura1-reuso-familia.svg) · fuente: [`12-figura1-reuso-familia.mmd`](12-figura1-reuso-familia.mmd)
 
-La figura siguiente contrasta el mapeo de familias actual (una por usuario) con el recomendado (una por sesión):
+La figura siguiente contrasta el mapeo de familias **pre-corrección** (una por usuario) con el **implementado** (una por sesión):
 
 ```mermaid
 flowchart LR
-    subgraph HOY["HOY — familyId = userId (una familia por usuario)"]
+    subgraph ANTES["ANTES — familyId = userId (una familia por usuario)"]
         direction TB
         U1["Usuario"]
         F1["familyId = userId<br/>UNA familia"]
         F1 --> T1["refresh · sesión 1 (móvil)"]
         F1 --> T2["refresh · sesión 2 (desktop)"]
         F1 --> T3["refresh · sesión 3 (tablet)"]
-        F1 --> X1["revokeFamily(userId) →<br/>se revocan las TRES sesiones"]:::risk
+        F1 --> X1["revokeFamily(userId) →<br/>se revocaban las TRES sesiones"]:::risk
     end
-    subgraph PROP["RECOMENDADO — familia = sesión"]
+    subgraph HOY["HOY (implementado) — familia = sesión"]
         direction TB
         U2["Usuario"]
-        FA["familyId = jti de la sesión 1"] --> R1["refresh a1 → a2 (rotación)"]
-        FB["familyId = jti de la sesión 2"] --> R2["refresh b1 → b2"]
-        FC["familyId = jti de la sesión 3"] --> R3["refresh c1 → c2"]
+        FA["familyId = UUID de la sesión 1"] --> R1["refresh a1 → a2 (rotación)"]
+        FB["familyId = UUID de la sesión 2"] --> R2["refresh b1 → b2"]
+        FC["familyId = UUID de la sesión 3"] --> R3["refresh c1 → c2"]
         FA --> X2["revokeFamily(familia A) →<br/>se revoca SOLO la sesión 1"]:::ok
     end
     classDef risk fill:#fdecea,stroke:#d93026
@@ -80,17 +84,17 @@ flowchart LR
 
 > Figura 12.2 · Versión estática: [`12-figura2-familias.svg`](12-figura2-familias.svg) · fuente: [`12-figura2-familias.mmd`](12-figura2-familias.mmd)
 
-### Consecuencias
+### Consecuencias del diseño original (por qué se corrigió)
 
-1. **UX**: un fallo de red puntual derriba las sesiones del usuario en todos los dispositivos ("me desloguearon de todo").
-2. **Seguridad amplificada**: el reuso deja de *contener* al atacante y se vuelve un vector de DoS contra la cuenta completa. La rotación correcta degrada al atacante a "pierde la sesión robada", no a "tumba al usuario".
-3. **Ruido de logs**: `REFRESH_REUSE_DETECTED` se dispara por reintentos legítimos, enterrando las detecciones reales de robo.
+1. **UX**: un fallo de red puntual derribaba las sesiones del usuario en todos los dispositivos ("me desloguearon de todo").
+2. **Seguridad amplificada**: el reuso dejaba de *contener* al atacante y se volvía un vector de DoS contra la cuenta completa. La rotación correcta degradera al atacante a "pierde la sesión robada", no a "tumba al usuario".
+3. **Ruido de logs**: `REFRESH_REUSE_DETECTED` se disparaba por reintentos legítimos, enterrando las detecciones reales de robo.
 
-### Corrección recomendada — familia por sesión
+### Corrección aplicada — familia por sesión (11-sep-2026, commit `8788e90`)
 
-1. En la **primera emisión** (login, register, consume de magic link, Google): `familyId = jti` del refresh token recién creado. Se toca una línea en `issueSession` (pasar `familyId` en `IssueSessionInput` en vez de fijar `input.userId`).
-2. En la **rotación** (`RefreshTokens`): leer el `familyId` del registro encontrado (`found.familyId`) y propagarlo al `insertRefreshToken` — no recrearlo. El reuso sigue revocando `revokeFamily(familyId)`, pero la familia ahora abarca solo una sesión.
-3. **Opcional — ventana de gracia**: ante reuso, revocar la familia de forma *diferida* (p. ej. si el mismo `jti` se vuelve a presentar en los próximos 30-60 s, devolver 401 sin revocar todavía). Esto absorbe el reintento legítimo definido por `fetch`/axios y mantiene la detección para el caso adversarial.
+1. En la **primera emisión** (login, register, consume de magic link, Google): `familyId = UUID de sesión` recién creado. `IssueSessionInput` ahora recibe `familyId: input.familyId` y se toca una línea en `issueSession` (pasar `familyId` en vez de fijar `input.userId`). ✓ implementado (`issueSession.ts:28`)
+2. En la **rotación** (`RefreshTokens`): se lee el `familyId` del registro encontrado (`found.familyId`) y se propaga al `insertRefreshToken` — no se recrea. El reuso sigue revocando `revokeFamily(familyId)`, pero la familia ahora abarca solo una sesión. ✓ implementado (`refreshTokens.ts:39`)
+3. **Opcional — ventana de gracia** (no aplicada): ante reuso, revocar la familia de forma *diferida* (p. ej. si el mismo `jti` se vuelve a presentar en los próximos 30-60 s, devolver 401 sin revocar todavía). Esto absorbería el reintento legítimo definido por `fetch`/axios manteniendo la detección para el caso adversarial. Pendiente de decisión si se quiere endurecer el reintento legítimo.
 
 **Tradeoff explícito**: familia = sesión reduce la severidad de la respuesta a un token robado (el atacante solo tumba la sesión comprometida, no la cuenta). Es la misma postura que toman los sistemas de token rotation modernos (Auth0, Firebase): contención por sesión, no por cuenta.
 

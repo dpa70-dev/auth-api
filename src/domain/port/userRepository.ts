@@ -6,7 +6,7 @@
  * bounded context — usuario (findByEmail/findByGoogleSub/findById/createUser/markEmailVerified)
  * y refresh token (findByRefreshTokenHash/insertRefreshToken/markRefreshTokenUsed/
  * revokeRefreshToken/revokeFamily) — en UN solo contrato porque el refresh token pertenece al
- * usuario en este dominio (doc 04 → decisión 2: familia = user_id). Tradeoff ISP aceptado: cada
+ * usuario en este dominio (doc 04 → decisión 2: family_id = UUID de sesión por login). Tradeoff ISP aceptado: cada
  * use case recibe el port completo aunque use 2-3 métodos; segregarlo ahora sería
  * sobre-ingeniería a este tamaño. Si el dominio crece, separar AQUÍ (p. ej. RefreshTokenRepository)
  * sin tocar ni la entidad ni los use cases: solo desacoplar el puerto y el constructor inyectado.

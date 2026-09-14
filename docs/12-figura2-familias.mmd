@@ -1,19 +1,19 @@
 flowchart LR
-    subgraph HOY["HOY — familyId = userId (una familia por usuario)"]
+    subgraph ANTES["ANTES — familyId = userId (una familia por usuario)"]
         direction TB
         U1["Usuario"]
         F1["familyId = userId<br/>UNA familia"]
         F1 --> T1["refresh · sesión 1 (móvil)"]
         F1 --> T2["refresh · sesión 2 (desktop)"]
         F1 --> T3["refresh · sesión 3 (tablet)"]
-        F1 --> X1["revokeFamily(userId) →<br/>se revocan las TRES sesiones"]:::risk
+        F1 --> X1["revokeFamily(userId) →<br/>se revocaban las TRES sesiones"]:::risk
     end
-    subgraph PROP["RECOMENDADO — familia = sesión"]
+    subgraph HOY["HOY (implementado) — familia = sesión"]
         direction TB
         U2["Usuario"]
-        FA["familyId = jti de la sesión 1"] --> R1["refresh a1 → a2 (rotación)"]
-        FB["familyId = jti de la sesión 2"] --> R2["refresh b1 → b2"]
-        FC["familyId = jti de la sesión 3"] --> R3["refresh c1 → c2"]
+        FA["familyId = UUID de la sesión 1"] --> R1["refresh a1 → a2 (rotación)"]
+        FB["familyId = UUID de la sesión 2"] --> R2["refresh b1 → b2"]
+        FC["familyId = UUID de la sesión 3"] --> R3["refresh c1 → c2"]
         FA --> X2["revokeFamily(familia A) →<br/>se revoca SOLO la sesión 1"]:::ok
     end
     classDef risk fill:#fdecea,stroke:#d93026

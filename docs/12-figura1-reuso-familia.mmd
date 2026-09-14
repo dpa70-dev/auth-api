@@ -12,8 +12,8 @@ sequenceDiagram
     Note over A,API: timeout de red — A nunca recibe v2
     A->>API: 5. reintento con v1 (el único token que posee)
     API->>DB: 6. findByRefreshTokenHash(v1) → status=used
-    API->>DB: 7. REUSO detectado → revokeFamily(userId)
-    Note over DB: familyId == userId ⇒ se revoca la familia ENTERA:<br/>también el refresh de B (sesión desktop)
+    API->>DB: 7. REUSO detectado → revokeFamily(familyId) — ANTES: familyId = userId
+    Note over DB: ANTES familyId == userId ⇒ se revocaba la familia ENTERA:<br/>también el refresh de B (sesión desktop).<br/>HOY revoca solo la sesión de A
     API-->>A: 8. 401 UNAUTHORIZED (genérico, anti-enumeración)
-    B->>API: 9. B intenta refrescar con su token → ya está revoked
-    API-->>B: 10. 401 UNAUTHORIZED — sesión desktop caída
+    B->>API: 9. B intenta refrescar con su token → ya está revoked (ANTES) / sigue vivo (HOY)
+    API-->>B: 10. 401 UNAUTHORIZED — sesión desktop caída (ANTES)
