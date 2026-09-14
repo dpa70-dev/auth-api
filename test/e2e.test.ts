@@ -427,6 +427,29 @@ describe('Transversal — rate limit, requestId, envelope', () => {
     }
   });
 
+  it('429 RATE_LIMITED global tras exceder el límite de /auth/me (GET sin authLimiter)', async () => {
+    const fresh = await startApp();
+    try {
+      // GET /auth/me no lleva authLimiter (solo requireAuth) — el corte lo da el globalLimiter
+      // montado en /api/v1 (doc 00 → ítem 49). Sin token → 401 hasta agotar el límite global.
+      let lastStatus = 0;
+      for (let i = 0; i < Number(process.env.RATE_LIMIT_MAX) + 2; i++) {
+        const res = await get(`${fresh.baseUrl}/auth/me`);
+        lastStatus = res.status;
+        if (res.status === 429) {
+          const { error } = await readJson<{ error: ErrorData }>(res);
+          expect(error.code).toBe('RATE_LIMITED');
+          expect(error.requestId).toMatch(/^req_/);
+          expect(res.headers.get('retry-after')).toBeTruthy();
+          break;
+        }
+      }
+      expect(lastStatus).toBe(429);
+    } finally {
+      await fresh.close();
+    }
+  });
+
   it('requestId del cliente se preserva (x-request-id)', async () => {
     const res = await post(
       `${ctx.baseUrl}/auth/login`,
