@@ -6,6 +6,7 @@ import { changePasswordRequest, credentialsRequest, googleRequest, refreshReques
 import { writeSuccess } from '../protocol/success.js';
 import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from '../cookies.js';
 import type { ApiDeps } from '../deps.js';
+import type { AuthResponseData, RefreshResponseData } from '../protocol/contractTypes.js';
 
 /** Handlers de credenciales (local) y Google. Cada uno es un cierre sobre (useCases, deps). */
 export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
@@ -18,7 +19,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshTtlDays: deps.config.refreshTtlDays,
       });
       setRefreshCookie(res, result.refreshToken, deps.config);
-      writeSuccess(res, 201, result);
+      writeSuccess<AuthResponseData>(res, 201, result);
     } catch (err) {
       next(err);
     }
@@ -33,7 +34,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshTtlDays: deps.config.refreshTtlDays,
       });
       setRefreshCookie(res, result.refreshToken, deps.config);
-      writeSuccess(res, 200, result);
+      writeSuccess<AuthResponseData>(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -50,7 +51,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshTtlDays: deps.config.refreshTtlDays,
       });
       setRefreshCookie(res, result.refreshToken, deps.config);
-      writeSuccess(res, 200, result);
+      writeSuccess<RefreshResponseData>(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -98,7 +99,7 @@ export const buildAuthHandlers = (useCases: UseCases, deps: ApiDeps) => {
         refreshTtlDays: deps.config.refreshTtlDays,
       });
       setRefreshCookie(res, result.refreshToken, deps.config);
-      writeSuccess(res, 200, result);
+      writeSuccess<AuthResponseData>(res, 200, result);
     } catch (err) {
       next(err);
     }
