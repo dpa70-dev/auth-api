@@ -1,33 +1,12 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from './protocol/errorKinds.js';
 import { requireAuth } from './middlewares/authMiddleware.js';
-import { STATUS_BY_CODE } from './middlewares/errorMiddleware.js';
-import { ERROR_MESSAGES, ErrorCodes } from '../domain/errorCatalog.js';
+import { authLimiter } from './middlewares/rateLimiters.js';
 import type { UseCases } from '../app/buildUseCases.js';
 import { buildHandlers } from './buildHandlers.js';
 import type { ApiDeps } from './deps.js';
 import { API_PATHS } from './paths.js';
-import type { Config } from '../config.js';
-
-/** Los endpoints /auth comparten el rate limit estricto (doc 00 → ítems 41, 48-49). */
-const authLimiter = (config: Config) =>
-  rateLimit({
-    windowMs: config.rateLimit.authWindowMs,
-    limit: config.rateLimit.authMax,
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    handler: (req, res) => {
-      res.status(STATUS_BY_CODE[ErrorCodes.RATE_LIMITED]).set('Retry-After', String(config.rateLimit.authWindowMs / 1000)).json({
-        error: {
-          code: ErrorCodes.RATE_LIMITED,
-          message: ERROR_MESSAGES[ErrorCodes.RATE_LIMITED],
-          requestId: req.requestId ?? 'req_unknown',
-        },
-      });
-    },
-  });
 
 /** Declaración de una ruta: ÚNICA fuente de verdad de método+path (registro y 405 derivan de aquí). */
 type RouteDeclaration = {

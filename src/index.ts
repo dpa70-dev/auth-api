@@ -13,6 +13,7 @@ import { PinoLogger, requestContext } from './infra/pinoLogger.js';
 import { apiRouter } from './api/routes.js';
 import { httpLoggerConfig, requestIdMiddleware } from './api/middlewares/middleware.js';
 import { finalErrorHandler, notFound } from './api/middlewares/errorMiddleware.js';
+import { globalLimiter } from './api/middlewares/rateLimiters.js';
 import cookieParser from 'cookie-parser';
 
 // Permite inyectar dependencias externas (útil en tests). Delega en composeInfra infra/compose.ts.
@@ -31,6 +32,7 @@ export const buildApp = (overrides: AppDeps = {}) => {
   app.use(pinoHttp(httpLoggerConfig(new PinoLogger(config.nodeEnv).raw)));
   app.use(requestIdMiddleware(requestContext));
 
+  app.use(API_PREFIX, globalLimiter(config));
   app.use(express.json({ limit: '16kb' }));
   app.use(cookieParser());
 
