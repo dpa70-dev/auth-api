@@ -13,6 +13,7 @@ Request
   → cors                              [origen permitido por config.corsOrigins]
   → pinoHttp (httpLoggerConfig)       [genReqId: x-request-id \| req_<uuid>; log por request]
   → requestIdMiddleware               [req.requestId + AsyncLocalStorage run()]
+  → globalLimiter (montada en /api/v1)[429 RATE_LIMITED al superar el límite global de la API]
   → express.json({ limit: '16kb' })   [parsea body; error → salta directo al handler final]
   → apiRouter (montada en /api/v1)
       → ruta específica + guarda (authLimiter | requireAuth)
@@ -22,9 +23,11 @@ Request
   → finalErrorHandler                 [405 → malformado → ApiError → ZodError → 500]
 ```
 
-Regla del circuito: **los 3 primeros middlewares corren antes del parseo de body**, por lo que
-cualquier error posterior (JSON inválido, oversize, 401, 422, 500) ya tiene `requestId`
-disponible para el envelope de error.
+Regla del circuito: **todos los middlewares hasta `globalLimiter` corren antes del parseo de
+body**, por lo que cualquier error posterior (JSON inválido, oversize, 401, 422, 500) ya
+tiene `requestId` disponible para el envelope de error — y el propio 429 del rate limit lo
+usa para responder con el mismo envelope (ver §2). El throttling antes del parseo además
+protege de abusos que dispararían `entity.too.large`/`entity.parse.failed` (`MALFORMED_REQUEST`).
 
 ---
 
@@ -67,6 +70,11 @@ la de presentación en `src/api/handlers/`.
 `req.userId`. `/auth/change-password` además exige `requireAuth` **primero** (la
 contraseña actual se prueba contra la cuenta del token, US-11); `/auth/password/reset`
 NO lleva `requireAuth` — el token del magic link ES la credencial (US-12).
+
+**Doble capa de throttling**: además de la guarda por ruta, `globalLimiter` corre en la
+cadena para **toda** request bajo `/api/v1` (ítem 49 de doc 00: límite global moderado +
+límite estricto en auth). `GET /auth/me`, los 404 de rutas desconocidas y cualquier otro
+request no cubierto por `authLimiter` quedan igualmente limitados por la capa global.
 
 ---
 
@@ -117,8 +125,8 @@ pasa por la misma caja para que NINGÚN handler acceda a repositorios directamen
 ## 6. Zonas de riesgo documentadas (decisiones deliberadas)
 
 1. **Rate limit por instancia**: `express-rate-limit` usa store en memoria — el límite
-   es por proceso. Con 2+ réplicas detrás de un LB, el límite efectivo se multiplica.
-   Aceptable single-instance; revisar (Redis store) al escalar.
+   (global y auth) es por proceso. Con 2+ réplicas detrás de un LB, el límite efectivo se
+   multiplica. Aceptable single-instance; revisar (Redis store) al escalar.
 2. **`x-request-id` confiable solo si el proxy no lo sobreescribe**: si un front
    arbitrario puede inyectarlo, el valor se valida (pattern + 64) pero no se autentica.
 3. **`/auth/me/` (trailing slash)**: normalizado a `/auth/me` en el middleware 405
