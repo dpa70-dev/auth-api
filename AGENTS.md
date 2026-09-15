@@ -36,6 +36,16 @@ src/
 
 Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada archivo exporta lo que crea"*, *"unir cabos / single source of truth"*.
 
+### 2.1 SOLID (mapeado a Clean Architecture, doc 00 → §1.2)
+
+| Principio | Cómo se aplica en este proyecto |
+|---|---|
+| **S** — Single Responsibility | Un módulo = una responsabilidad: handler / use case / repositorio separados. ≤ 250 LOC por archivo; sin "God classes" ni `*Service` genéricos. |
+| **O** — Open/Closed | Extensiones sin modificar el core: cambiar el proveedor de hashing o de DB (SQLite → Postgres) implica **añadir un adaptador**, nunca tocar el dominio. |
+| **L** — Liskov | Implementaciones sustituibles: repos en memoria (tests) y SQLite (producción) se intercambian sin cambiar quien las usa. |
+| **I** — Interface Segregation | Puertos pequeños y específicos: el use case pide solo lo que necesita (`findByEmail`, `save`), no un CRUD gigante. |
+| **D** — Dependency Inversion | El dominio depende de **puertos** (interfaces), nunca de librerías concretas ni de Express. Inyección por constructor en los use cases (DIP). |
+
 ## 3. SDD — el contrato es la fuente de verdad
 
 - La especificación OpenAPI (`docs/03-openapi.yaml`) se escribe **antes** del código y define el comportamiento externo. Documento de referencia: docs/00 → §1.1.
@@ -43,16 +53,18 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
 - Ningún endpoint se implementa sin su especificación previa con sus códigos de respuesta.
 - Los `SuccessStatus`/`ErrorStatus` en `src/api/protocol/contractStatus.ts` se derivan del contrato (mapped types + `Is2xx`/`Is4xx5xx`). Si el contrato no declara algún status (p. ej. `404`/`405` son del middleware central), se añaden explícitamente como unión documentada.
 
-## 4. Principios de código (doc 00 → §1.3, §10)
+## 4. Principios de código Clean Code (doc 00 → §1.3, §10)
 
-- **Símbolo dominante = nombre del archivo**: `apiError.ts` → `ApiError`; `logger.ts` → `Logger`. Un archivo = una responsabilidad; ≤ 250 LOC; sin `*Service` genéricos ni "kitchen sinks".
-- **Funciones pequeñas** (~≤ 30 líneas), una sola cosa, sin parámetros booleanos con flag.
-- **Comentarios solo para el "porqué"**: decisión de negocio o contexto no evidente; nunca re-explicar el qué. JSDoc redundante que repite la firma = eliminarlo.
-- **Tipos que excluyen estados ilegales**: uniones discriminadas, VOs brandeados con Zod; el compilador hace imposible el estado inválido.
+- **P-01 — Nombres con intención**: `RegisterUserUseCase`, `hashPassword`, `findByEmail` — el nombre comunica propósito y nivel de abstracción, no mecanismo.
+- **P-02 — Funciones pequeñas**: una sola cosa (~≤ 30 líneas), sin efectos ocultos, sin parámetros booleanos que cambian el flujo (flag envy → dividir la función).
+- **P-03 — Comentarios solo para el "porqué"**: decisión de negocio o contexto no evidente; nunca re-explicar el qué. JSDoc redundante que repite la firma = eliminarlo.
+- **P-04 — Tipos que excluyen estados ilegales**: uniones discriminadas, VOs brandeados con Zod; el compilador hace imposible el estado inválido.
+- **P-05 — DRY con juicio**: abstraer en la tercera repetición (regla de tres); YAGNI. **No duplicar tipos idénticos en paralelo** (doc 05 → Fase 5).
+- **P-06 — Errores explícitos y tempranos**: fallar rápido en el borde; sin excepciones mudas, `catch` vacíos ni conversiones `any`/`@ts-ignore`.
+- **Símbolo dominante = nombre del archivo**: `apiError.ts` → `ApiError`; `logger.ts` → `Logger`. Un archivo = una responsabilidad; sin "kitchen sinks".
 - **Cero `any` / `@ts-ignore` / `@ts-expect-error` / `as any`** — política del proyecto (doc 00 → §2.4, §10.3).
-- **DRY con juicio**: abstraer en la tercera repetición (regla de tres); YAGNI. **No duplicar tipos idénticos en paralelo** (doc 05 → Fase 5).
 - **No re-exportar tipos que no creaste** (doc 05 → Fase 4): cada archivo importa cada tipo de donde vive.
-- **Errores explícitos y tipados**: jerarquía `AppError` + catálogo en `domain/errorCatalog.ts` (fuente única del vocabulario). Sin `catch {}` vacíos, sin excepciones mudas. Los use cases lanzan errores de dominio y no saben de HTTP; el middleware central mapea al envelope.
+- **Errores tipados por catálogo**: jerarquía `AppError` + catálogo en `domain/errorCatalog.ts` (fuente única del vocabulario). Los use cases lanzan errores de dominio y no saben de HTTP; el middleware central mapea al envelope.
 - Respuestas por helpers centrales tipados (`writeSuccess`/`writeError`), nunca dispersas en handlers.
 - **Logging**: pino, prohibido `console.log` (eslint lo bloquea; solo se permite `console.error` para fallos fatales previos al logger). Redactar datos sensibles; el dominio no loggea por su cuenta (puerto `Logger`).
 - **Env validado con schema al arranque**; nunca `process.env` disperso.
