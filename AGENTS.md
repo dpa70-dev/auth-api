@@ -66,6 +66,7 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
 - **No re-exportar tipos que no creaste** (doc 05 → Fase 4): cada archivo importa cada tipo de donde vive.
 - **Errores tipados por catálogo**: jerarquía `AppError` + catálogo en `domain/errorCatalog.ts` (fuente única del vocabulario). **El código de error jamás se instancia con literales hardcodeados** — `new ApiError('INVALID_CREDENTIALS')` es ilegal en un call-site; el código proviene del catálogo (doc 05 → Fase 1). Los use cases lanzan errores de dominio y no saben de HTTP; el middleware central mapea al envelope.
 - Respuestas por helpers centrales tipados (`writeSuccess`/`writeError`), nunca dispersas en handlers.
+- **Unit of Work (doc 13 → §13.1)**: en use cases multi-escritura, `BEGIN`/`COMMIT` solo alrededor de las escrituras, **nunca** alrededor de llamadas lentas o de red — verificar/hashear/generar crypto **fuera** de la tx, envolver solo los inserts/updates con `unitOfWork.withTransaction`. Con better-sqlite3 la tx es de alcance de conexión: `fn` no recibe repos "transaccionales" (serían no-op). Implementado en `RegisterUser`, `ConsumeMagicLink`, `ResetPassword`.
 - **Logging**: pino, prohibido `console.log` (eslint lo bloquea; solo se permite `console.error` para fallos fatales previos al logger). Redactar datos sensibles; el dominio no loggea por su cuenta (puerto `Logger`).
 - **Env validado con schema al arranque**; nunca `process.env` disperso.
 
