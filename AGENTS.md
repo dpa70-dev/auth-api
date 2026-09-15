@@ -64,7 +64,7 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
 - **Símbolo dominante = nombre del archivo**: `apiError.ts` → `ApiError`; `logger.ts` → `Logger`. Un archivo = una responsabilidad; sin "kitchen sinks".
 - **Cero `any` / `@ts-ignore` / `@ts-expect-error` / `as any`** — política del proyecto (doc 00 → §2.4, §10.3).
 - **No re-exportar tipos que no creaste** (doc 05 → Fase 4): cada archivo importa cada tipo de donde vive.
-- **Errores tipados por catálogo**: jerarquía `AppError` + catálogo en `domain/errorCatalog.ts` (fuente única del vocabulario). Los use cases lanzan errores de dominio y no saben de HTTP; el middleware central mapea al envelope.
+- **Errores tipados por catálogo**: jerarquía `AppError` + catálogo en `domain/errorCatalog.ts` (fuente única del vocabulario). **El código de error jamás se instancia con literales hardcodeados** — `new ApiError('INVALID_CREDENTIALS')` es ilegal en un call-site; el código proviene del catálogo (doc 05 → Fase 1). Los use cases lanzan errores de dominio y no saben de HTTP; el middleware central mapea al envelope.
 - Respuestas por helpers centrales tipados (`writeSuccess`/`writeError`), nunca dispersas en handlers.
 - **Logging**: pino, prohibido `console.log` (eslint lo bloquea; solo se permite `console.error` para fallos fatales previos al logger). Redactar datos sensibles; el dominio no loggea por su cuenta (puerto `Logger`).
 - **Env validado con schema al arranque**; nunca `process.env` disperso.
