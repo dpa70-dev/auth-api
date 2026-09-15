@@ -9,8 +9,8 @@ import type { SuccessBody } from './envelope.js';
  * El status code sigue siendo decisión del handler (transporte), junto a su `execute`.
  */
 
-/** Status de éxito del contrato: conjunto cerrado de 2xx emitidos por writeSuccess (doc 03 → responses). */
-export type SuccessStatus = 200 | 201 | 204;
+import type { SuccessStatus } from './contractStatus.js';
+export type { SuccessStatus };
 
 export const writeSuccess = <T>(res: Response, status: SuccessStatus, data: T | null): void => {
   if (data === null) {

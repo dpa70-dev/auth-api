@@ -7,8 +7,8 @@ import type { ErrorBody } from './envelope.js';
  * El status code es decisión del caller (transporte), nunca del dominio.
  */
 
-/** Status de error del contrato: conjunto cerrado de 4xx/5xx emitidos por writeError — espejo de STATUS_BY_CODE. */
-export type ErrorStatus = 400 | 401 | 404 | 405 | 409 | 422 | 429 | 500;
+import type { ErrorStatus } from './contractStatus.js';
+export type { ErrorStatus };
 
 export const writeError = (res: Response, status: ErrorStatus, error: ErrorBody['error']): void => {
   res.status(status).json({ error });

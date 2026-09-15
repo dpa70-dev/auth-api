@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'src/contract.ts'] },
+  { ignores: ['dist', 'node_modules', 'src/api/contract.ts'] },
   ...tseslint.configs.recommended,
   {
     rules: {
