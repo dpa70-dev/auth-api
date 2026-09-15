@@ -101,3 +101,26 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
 - Trabajo multi-paso: usar todo list. Cada cambio verificado con los gates de §5 antes de reportar.
 - Si un cambio contradice una decisión documentada de doc 00/05, plantearlo antes de implementar — no "arreglarlo" silenciosamente.
 - La documentación (`docs/`) es parte del entregable: features → su sección en docs se actualiza/marca como implementada (mismo patrón ya usado: "implementado (fecha) — N tests en verde").
+
+## 8. Patrones de diseño (docs/09 y docs/13)
+
+### Ya implementados — reconocerlos, no reinventarlos
+
+| Patrón | Dónde vive | Regla asociada |
+|---|---|---|
+| Ports & Adapters | Puertos en `domain/port/`, adaptadores en `infra/`, fakes en `test/` (doc 09) | `app/` y `domain/` dependen solo de interfaces; los adaptadores se inyectan en compose |
+| Strategy | `TokenIssuer`, `PasswordHasher` (doc 13.6) | Proveedor nuevo = **adaptador nuevo**, jamás tocar el dominio |
+| Repository | `UserRepository`, `MagicLinkRepository` | Puertos pequeños y específicos (§2.1 — I) |
+| Unit of Work | `domain/port/unitOfWork.ts` + `infra/sqliteUnitOfWork.ts` (§4) | tx solo alrededor de escrituras |
+| Value Objects brandeados | `domain/vo/` con Zod (§1) | *parse, don't validate* |
+
+### Catálogo de candidatos — documentados, NO implementar de motu proprio
+
+| # | Patrón | Nota |
+|---|---|---|
+| 13.2 | `asyncHandler` (Template Method) | Esqueleto repetido de handlers — espera en la guía |
+| 13.3 | Transactional Outbox | Emails fiables — cuando entre SMTP real |
+| 13.4 | Domain Events (Observer) | **Solo con ≥2 consumidores por evento** — hoy el vocabulario `logEvents` basta inline |
+| 13.5 | Circuit Breaker | Resiliencia ante caída de Google |
+
+Guía completa y orden de implementación en `docs/13-patrones-a-sumarr.md` — **consultarla antes de añadir cualquiera** de estos patrones.
