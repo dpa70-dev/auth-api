@@ -8,3 +8,4 @@ export { ConsumeMagicLink, type ConsumeMagicLinkCommand, type ConsumeMagicLinkRe
 export { GetMe, type GetMeCommand, type GetMeResult } from './getMe.js';
 export { ChangePassword, type ChangePasswordCommand } from './changePassword.js';
 export { ResetPassword, type ResetPasswordCommand } from './resetPassword.js';
+export { RequestOtp, type RequestOtpCommand, type RequestOtpResult } from './requestOtp.js';
