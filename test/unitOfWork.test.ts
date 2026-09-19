@@ -5,7 +5,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { RegisterUser } from '../src/app/useCases/registerUser.js';
 import type { CompromisedPasswordChecker, Logger, PasswordHasher, TokenIssuer } from '../src/domain/port/index.js';
-import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
+import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/drizzleUserRepository.js';
 import { JoseTokenService } from '../src/infra/joseTokenService.js';
 import { SqliteUnitOfWork } from '../src/infra/sqliteUnitOfWork.js';
@@ -52,6 +52,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
         passwordHash: await stubHasher.hash('secreta123' as PlainPassword),
         googleSub: null,
         emailVerified: false,
+        kind: userKindSchema.enum.registered,
         createdAt: now(),
       });
       await users.insertRefreshToken({
@@ -80,6 +81,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
           passwordHash: await stubHasher.hash('secreta123' as PlainPassword),
           googleSub: null,
           emailVerified: false,
+          kind: userKindSchema.enum.registered,
           createdAt: now(),
         });
         // Segunda escritura falla (email duplicado → UniqueConstraintViolation en el repo).
@@ -89,6 +91,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
           passwordHash: await stubHasher.hash('otra123' as PlainPassword),
           googleSub: null,
           emailVerified: false,
+          kind: userKindSchema.enum.registered,
           createdAt: now(),
         });
       }),

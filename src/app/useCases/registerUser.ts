@@ -11,7 +11,7 @@ import type {
   UserRecord,
   UserRepository,
 } from '../../domain/port/index.js';
-import { familyIdSchema, providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -76,6 +76,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
           passwordHash,
           googleSub: null,
           emailVerified: false,
+          kind: userKindSchema.enum.registered,
           createdAt: now.toISOString(),
         });
       } catch (err) {

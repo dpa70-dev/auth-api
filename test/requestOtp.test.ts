@@ -9,6 +9,7 @@ import {
   emailSchema,
   otpStatusSchema,
   userIdSchema,
+  userKindSchema,
   type Email,
   type PasswordHash,
   type PlainPassword,
@@ -91,6 +92,7 @@ describe('RequestOtp — US-13 solicitud de código OTP', () => {
       passwordHash: await stubHasher.hash('contraseña123'),
       googleSub: null,
       emailVerified: false,
+      kind: userKindSchema.enum.registered,
       createdAt: now.toISOString(),
     });
 

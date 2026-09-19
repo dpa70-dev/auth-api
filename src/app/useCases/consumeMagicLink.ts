@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, MagicLinkRepository, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, userKindSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -78,6 +78,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
           passwordHash: null,
           googleSub: null,
           emailVerified: true,
+          kind: userKindSchema.enum.registered,
           createdAt: now.toISOString(),
         });
         this.logger.info(LOG_EVENTS.USER_REGISTERED_VIA_MAGIC_LINK, { userId });

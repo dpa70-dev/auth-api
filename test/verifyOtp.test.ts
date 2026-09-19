@@ -11,6 +11,7 @@ import {
   otpStatusSchema,
   providerSchema,
   userIdSchema,
+  userKindSchema,
   type Email,
   type PasswordHash,
   type PlainPassword,
@@ -121,6 +122,7 @@ describe('VerifyOtp — US-14 verificación de código OTP', () => {
       passwordHash: await verifyHasher.hash('contraseña123'),
       googleSub: null,
       emailVerified: false,
+      kind: userKindSchema.enum.registered,
       createdAt: '2025-01-01T00:00:00.000Z',
     });
     const rawCode = await requestCode(to);
