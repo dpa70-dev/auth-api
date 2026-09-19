@@ -55,6 +55,8 @@ const envSchema = z.object({
   // Los emails componen sus URLs con origin + API_PREFIX + path — el env solo declara el origin
   // (lo que varía por entorno); jamás se deriva del Host header del request (anti-poisoning).
   MAGIC_LINK_TTL_MINUTES: z.coerce.number().int().positive().max(60).default(15),
+  // OTP (US-13/14): TTL en minutos del código de verificación (doc 00 → ítem 34: 5 min default, máx 15).
+  OTP_TTL_MINUTES: z.coerce.number().int().positive().max(15).default(5),
   // Origin público (esquema+host, sin path) de la API para los enlaces de email. Opcional:
   // vacío o ausente → default dev HOST:PORT (config de confianza en boot, no el Host header).
   PUBLIC_API_ORIGIN: z
@@ -101,6 +103,9 @@ const envSchema = z.object({
         ttlMinutes: data.MAGIC_LINK_TTL_MINUTES,
         consumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.magicLinkConsume}`,
         passwordResetConsumeBaseUrl: `${apiOrigin}${API_PREFIX}${API_PATHS.passwordReset}`,
+      },
+      otp: {
+        ttlMinutes: data.OTP_TTL_MINUTES,
       },
       localPasswordListPath: data.LOCAL_PASSWORD_LIST_PATH ?? 'data/top-100k-sha1.txt',
     };

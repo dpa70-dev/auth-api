@@ -89,7 +89,7 @@ Registrados durante el QA. Estado de cierre:
 
 ## 10. Cierre del QA (estado al 31-ago-2026)
 
-- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓. *(Conteo al cierre del 31-ago-2026; el estado vigente del repo es `vitest` **101/101** en 10 archivos — ver §15.)*
+- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓. *(Conteo al cierre del 31-ago-2026; el estado vigente del repo es `vitest` **136/136** en 15 archivos — ver §16.)*
 - De los pendientes del tintero: **los 4 resueltos** — #1 (`GOOGLE_ISSUER` en `.env.example`), #2 (canal Swagger → editor.swagger.io), #3 (fallback `iat`/`exp`) y #4 (nonce anti-replay condicional + typo `verifyyy`).
 - Greps de referencia cruzada confirman: **0** referencias residuales a lo eliminado, **0** re-exports de tipos ajenos en las capas, dominio autónomo (0 imports hacia artefactos externos).
 
@@ -184,4 +184,30 @@ Implementación completa del flujo de magic link (US-09/US-10) siguiendo el plan
 - CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5) y CHECK de `provider` ampliado a `magic` — el alta implícita de auto-cuenta es persistible.
 - `ConsumeMagicLink` reutiliza `TokenIssuer.issueSession` (misma emisión/rotación que `/login` y `/google`); las sesiones magic usan nuestros refresh (doc 00 → ítem 47).
 
-**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓. *(Conteo al 3-sep-2026; el estado vigente del repo es `vitest` **101/101** en 10 archivos — transporte dual, rate limiting global, tipado contra contrato: ver docs/05 §11, docs/08 y commit `1c2b8ef`/`b526789`.)*
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓. *(Conteo al 3-sep-2026; el estado vigente del repo es `vitest` **136/136** en 15 archivos — acceso por OTP (US-13/14), transporte dual, rate limiting global, tipado contra contrato: ver §16, docs/05 §11, docs/08 y commit `1c2b8ef`/`b526789`.)*
+
+---
+
+## 16. Tema tratado — Código OTP: acceso sin contraseña por email (19-sep-2026)
+
+Implementación completa del flujo OTP (US-13/US-14) siguiendo el plan aprobado en `.omo/plans/otp-guest.md` (Track A).
+
+**Decisiones del plan (ratificadas por el usuario)**:
+- **Hash argon2id, no SHA-256**: un código de 6 dígitos (`randomInt(0, 1_000_000).padStart(6, '0')`) es brute-forceable offline — el hash lento (m=19456, t=2, p=1) encarece cada intento y `otp_codes` guarda solo `code_hash` (doc 00 → ítem 34/35).
+- **Anti-enumeración (opción B, misma lección que magic link §15)**: `request` genera/persiste/envía **siempre** (exista o no el email) con `200 { ok: true }` idéntico — es lo que habilita la **auto-cuenta** en el verify (espejo US-10 AC-02).
+- **Rotación (US-13 AC-03)**: un request nuevo **revoca** el pendiente anterior del mismo email (`revokeAllForEmail`) — un solo código vigente por email.
+- **Máx 5 intentos (US-14 AC-03)**: `attempts >= 5` → `markStatus(revoked)` y fuerza un nuevo request; el límite es persistente (columna `attempts`), no rate-limit de red.
+- **Un solo uso (US-14 AC-02)**: `markStatus(used)` tras la verificación; reuso → 401 idéntico.
+- **Auto-cuenta (US-14 AC-04)**: email no registrado → usuario sin password con `email_verified = 1` (`provider = 'otp'`); email registrado → `markEmailVerified`.
+- **NO es 2FA**: el OTP es el único factor de entrada (login passwordless para la app móvil), no un segundo factor — 2FA sigue fuera de alcance (doc 01).
+
+**Verificación de arquitectura** (nuevos puertos/adapters del OTP):
+- `OtpRepository` (puerto, domain/port) → `DrizzleOtpRepository` (infra), inyectado por constructor en `RequestOtp`/`VerifyOtp` — DIP respetado (doc 00 → ítem 26).
+- `EmailSender.sendOtpCode` añadido al puerto existente + su impl en `ConsoleEmailSender` — adapter intercambiable sin tocar los use cases (doc 00 → ítem 55).
+- VOs `OtpCode` (6 dígitos, zod branded) y `OtpStatus` (`pending`/`used`/`revoked`) en `domain/vo/`; `providerValues` ampliado a `['local','google','magic','otp']` (doc 04 → decisión 6).
+- Tabla `otp_codes` + migración `0004_premium_warbound.sql` (doc 04 → decisiones 9-11); CHECKs derivados de los VOs vía `inList` (fuente única, mismo patrón que magic_links).
+- `VerifyOtp` reutiliza `TokenIssuer.issueSession` (misma emisión/rotación que `/login`, `/google` y magic link); sesiones OTP usan nuestros refresh (doc 00 → ítem 47).
+- **Unit of Work (doc 13 → §13.1)**: verificación argon2 + lectura de usuario + emisión jose **fuera** de la tx; dentro, solo las escrituras atómicas (auto-cuenta/`markEmailVerified` + `markStatus(used)` + `insertRefreshToken`).
+- Errores solo desde catálogo: `OTP_INVALID` (sin literales en call-sites) → 401 en `errorMiddleware`; `LOG_EVENTS` OTP_* para trazabilidad.
+
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **136/136** en 15 archivos (106 previos + 30 nuevos: `otpCode.test.ts` 7 + `requestOtp.test.ts` 3 + `verifyOtp.test.ts` 9 + `otp.test.ts` 11) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado ✓ · merge `feat/otp` a main `--no-ff` ✓. *(Estado vigente del repo al 19-sep-2026.)*

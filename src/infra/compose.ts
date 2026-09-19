@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
-import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, UnitOfWork } from '../domain/port/index.js';
+import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, OtpRepository, UnitOfWork } from '../domain/port/index.js';
 import { Argon2PasswordHasher } from './argon2PasswordHasher.js';
 import { CompositeCompromisedPasswordChecker } from './compositeCompromisedPasswordChecker.js';
 import { HibpCompromisedPasswordChecker } from './hibpCompromisedPasswordChecker.js';
@@ -11,6 +11,7 @@ import { LocalCompromisedPasswordChecker } from './localCompromisedPasswordCheck
 import { JoseTokenService } from './joseTokenService.js';
 import { DrizzleUserRepository } from './drizzleUserRepository.js';
 import { DrizzleMagicLinkRepository } from './drizzleMagicLinkRepository.js';
+import { DrizzleOtpRepository } from './drizzleOtpRepository.js';
 import { ConsoleEmailSender } from './consoleEmailSender.js';
 import { GoogleIdTokenVerifierJose } from './googleJwtVerifier.js';
 import { PinoLogger } from './pinoLogger.js';
@@ -36,6 +37,7 @@ export type InfraPorts = {
   tokens: TokenIssuer;
   google: GoogleIdTokenVerifier | null;
   magicLinks: MagicLinkRepository;
+  otpCodes: OtpRepository;
   sender: EmailSender;
   compromised: CompromisedPasswordChecker;
   /** Unit of Work (doc 13 → §13.1): transacción atómica de escrituras. */
@@ -70,6 +72,7 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
   const tokens = new JoseTokenService(new TextEncoder().encode(cfg.jwtSecret), cfg.accessTtlMinutes);
   const users = new DrizzleUserRepository(db);
   const magicLinks = overrides.magicLinks ?? new DrizzleMagicLinkRepository(db);
+  const otpCodes = new DrizzleOtpRepository(db);
   const sender = overrides.sender ?? new ConsoleEmailSender(logger);
   const google = overrides.google !== undefined
     ? overrides.google
@@ -78,5 +81,5 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
       : null;
   const unitOfWork = overrides.unitOfWork ?? new SqliteUnitOfWork(sqlite);
 
-  return { users, hasher, tokens, google, magicLinks, sender, compromised, unitOfWork, logger, close: () => sqlite.close() };
+  return { users, hasher, tokens, google, magicLinks, otpCodes, sender, compromised, unitOfWork, logger, close: () => sqlite.close() };
 };

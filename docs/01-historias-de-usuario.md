@@ -1,7 +1,7 @@
 # 01 · Historias de Usuario y Criterios de Aceptación — API Signup/Login
 
 **Estado**: Fase 2 de Spec Driven Development (contrato OpenAPI en `03-openapi.yaml`) — historias completadas como entrada de la especificación (doc 03) y de la implementación (fase 3, resuelta: 74 tests e2e en verde, ver `test/e2e.test.ts`, `test/magicLink.test.ts`, `test/changePassword.test.ts` y `test/passwordReset.test.ts`).
-**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), **acceso por magic link sin contraseña (US-09/10)**, **cambio de contraseña (US-11)** y **recuperación de contraseña por email (US-12)**, colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
+**Alcance**: registro local y login con email/contraseña, login con Google (OIDC), **acceso por magic link sin contraseña (US-09/10)**, **acceso por código OTP de 6 dígitos por email (US-13/14)**, **cambio de contraseña (US-11)** y **recuperación de contraseña por email (US-12)**, colisión de identidades entre proveedores, logout, refresco de tokens y acceso a recursos protegidos de una API REST.
 
 ---
 
@@ -220,6 +220,39 @@
 
 ---
 
+## US-13 · Solicitud de código OTP (sign in sin contraseña por email)
+
+**Como** usuario de la app móvil, **quiero** pedir un código numérico de 6 dígitos por email, **para** entrar sin recordar contraseñas.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un email válido, cuando hago `POST /auth/otp/request` con `{ email }`, entonces obtengo `200 { data: { ok: true } }` **idéntico** exista o no el email (anti-enumeración: misma forma y misma cantidad de trabajo que US-09), y se envía un email con un código numérico de 6 dígitos.
+- **AC-02** — El código se persiste **solo como hash argon2id** (nunca claro). A diferencia del magic link (token opaco de alta entropía servible con SHA-256), un código de 6 dígitos es brute-forceable offline: el hash lento argon2id (m=19456 t=2 p=1) lo hace inviable y un leak de `otp_codes` no expone códigos utilizables.
+- **AC-03** — **Un solo pendiente por email**: un request nuevo **revoca** el código anterior antes de insertar el nuevo (rotación).
+- **AC-04** — email fuera de formato → `422`; el endpoint está bajo el rate limit de auth → `429`.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/otp/request` · body `{ email }` · respuestas 200/422/429/500. El código ES la credencial de un solo factor (**no es 2FA**): la ruta lleva solo `authLimiter` (sin `requireAuth`), igual que magic link.
+
+---
+
+## US-14 · Verificación de código OTP (login por código)
+
+**Como** usuario que recibió su código, **quiero** entrar con él, **para** autenticarme sin contraseña.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado un `{ email, code }` válido (emitido, vigente, correcto), cuando hago `POST /auth/otp/verify`, entonces obtengo `200` con **access + refresh** (mismo contrato `AuthResponse` que `/login`).
+- **AC-02** — `401 OTP_INVALID` **idéntico** para: código inexistente, vencido, incorrecto o ya usado (anti-enumeración + un solo uso, patrón US-10 AC-04/AC-05).
+- **AC-03** — **Máx 5 intentos**: el código con 5 fallos de verificación queda **revocado** (el 6º intento, aunque lleve el código correcto, → `401` idéntico).
+- **AC-04** — **Auto-cuenta**: email aún no registrado → se crea el usuario con `email_verified = 1` (el código prueba la posesión del email, coherente con US-10 AC-02) y **sin contraseña**; sesión emitida con `provider = 'otp'`.
+- **AC-05** — Cuenta registrada → sesión sobre la misma cuenta (sin alterar sus credenciales).
+- **AC-06** — El refresh emitido rota en `/auth/refresh` como cualquier sesión (mismo diagrama 3).
+- **AC-07** — `email`/`code` fuera de formato → `422`; el endpoint está bajo el rate limit de auth → `429`.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/otp/verify` · body `{ email, code }` · respuestas 200/401/422/429/500. El código ES la credencial: la ruta lleva solo `authLimiter` (sin `requireAuth`).
+
+---
+
 ## Fuera de alcance (para fases futuras)
 
 - ~~Verificación de email~~ — **resuelto con magic link (US-09/10)**: emails locales se verifican al consumir un enlace (`email_verified = 1`); sigue aplicando que los de Google vienen verificados por OIDC.
@@ -241,3 +274,4 @@
 4. *(Resuelto el 29-ago-2026)*: **implementación contra el contrato (SDD)** con `openapi-typescript` (tipos derivados del contrato) y contract tests.
 5. *(Resuelto el 3-sep-2026)*: **magic link (US-09/10)** — contrato (doc 03), modelo `magic_links` (doc 04), diagrama 6 (doc 02), consideraciones nº 55 (doc 00) e implementación completa con 10 tests nuevos en `test/magicLink.test.ts` (56 total).
 6. *(Resuelto el 5-sep-2026)*: **cambio y recuperación de contraseña (US-11/12)** — `intent`/`purpose` en el contrato (doc 03), columna `magic_links.purpose` (doc 04), flujo de reset en el diagrama 6 (doc 02), consideración nº 56 (doc 00) e implementación con 18 tests nuevos en `test/changePassword.test.ts` (7) y `test/passwordReset.test.ts` (11) — **74 total**.
+7. *(Resuelto el 19-sep-2026)*: **OTP por email (US-13/14)** — contrato (doc 03), tabla `otp_codes` + `provider 'otp'` (doc 04), diagrama 6.2 (doc 02), consideración nº 57 (doc 00) e implementación con 30 tests nuevos en `test/otpCode.test.ts` (7), `test/requestOtp.test.ts` (3), `test/verifyOtp.test.ts` (9) y `test/otp.test.ts` (11) — **136 total en 15 archivos**.

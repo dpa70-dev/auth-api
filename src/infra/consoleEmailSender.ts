@@ -17,4 +17,8 @@ export class ConsoleEmailSender implements EmailSender {
   async sendPasswordResetEmail({ to, url }: { to: Email; url: string }): Promise<void> {
     this.logger.info(LOG_EVENTS.PASSWORD_RESET_REQUESTED, { to, url });
   }
+
+  async sendOtpCode({ to, code }: { to: Email; code: string }): Promise<void> {
+    this.logger.info(LOG_EVENTS.OTP_REQUESTED, { to, code });
+  }
 }

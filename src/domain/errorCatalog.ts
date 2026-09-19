@@ -13,6 +13,7 @@ export const ERROR_CATALOG = [
   { code: 'EMAIL_NOT_VERIFIED', message: 'El email no está verificado en Google.' },
   { code: 'PASSWORD_COMPROMISED', message: 'La contraseña fue comprometida en una filtración conocida; elegí otra.' },
   { code: 'MAGIC_LINK_INVALID', message: 'Enlace de acceso inválido o expirado.' },
+  { code: 'OTP_INVALID', message: 'Código de acceso inválido o expirado.' },
   { code: 'RATE_LIMITED', message: 'Demasiados intentos. Reintentá más tarde.' },
   { code: 'UNAUTHORIZED', message: 'No autenticado.' },
   { code: 'MALFORMED_REQUEST', message: 'El cuerpo de la petición es inválido o excede el tamaño permitido.' },

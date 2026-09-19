@@ -30,6 +30,8 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     magicLinkRequestHandler,
     magicLinkConsumeHandler,
     passwordResetHandler,
+    otpRequestHandler,
+    otpVerifyHandler,
     meHandler,
   } = buildHandlers(useCases, deps);
 
@@ -46,6 +48,9 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     { method: 'post', path: API_PATHS.magicLinkConsume, guards: [authLimiter(deps.config)], handler: magicLinkConsumeHandler },
     // US-12: el token del email ES la credencial → solo authLimiter (sin requireAuth).
     { method: 'post', path: API_PATHS.passwordReset, guards: [authLimiter(deps.config)], handler: passwordResetHandler },
+    // US-13/14: el código OTP ES la credencial → solo authLimiter (sin requireAuth).
+    { method: 'post', path: API_PATHS.otpRequest, guards: [authLimiter(deps.config)], handler: otpRequestHandler },
+    { method: 'post', path: API_PATHS.otpVerify, guards: [authLimiter(deps.config)], handler: otpVerifyHandler },
     { method: 'get', path: API_PATHS.me, guards: [requireAuth(deps.tokens)], handler: meHandler },
   ];
 

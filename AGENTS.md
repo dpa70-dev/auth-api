@@ -80,7 +80,7 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
   npx eslint src/ test/
   npx vitest run
   ```
-- Estado actual: 106 tests en 11 archivos. Si una feature añade tests, actualizar también el conteo en los docs afectados si lo mencionan (doc 05 → §10/§15).
+- Estado actual: 136 tests en 15 archivos. Si una feature añade tests, actualizar también el conteo en los docs afectados si lo mencionan (doc 05 → §10/§15/§16).
 - CI mínimo documentado: typecheck + lint + test + `npm audit`.
 
 ## 6. Flujo de trabajo git

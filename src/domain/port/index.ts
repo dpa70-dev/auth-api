@@ -11,6 +11,7 @@ export * from './googleIdTokenVerifier.js';
 export * from './logEvents.js';
 export * from './logger.js';
 export * from './magicLinkRepository.js';
+export * from './otpRepository.js';
 export * from './passwordHasher.js';
 export * from './tokenIssuer.js';
 export * from './unitOfWork.js';

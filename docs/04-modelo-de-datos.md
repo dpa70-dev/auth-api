@@ -1,6 +1,6 @@
 # 04 · Modelo de Datos — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento.
+**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento. **Ampliado (19-sep-2026)**: tabla `otp_codes` para el acceso por código OTP (US-13/14) + `provider 'otp'` en la CHECK de `refresh_tokens` — migración `0004_premium_warbound.sql` (+ su UK e índices en el mismo snapshot), verificada contra las decisiones 6, 9-11 de este documento.
 **Fuente**: doc 00 → ítems 15 (timestamps), 30-33 (SQLite/Drizzle/migraciones), 35 (argon2id), 38 (refresh hasheado + jti), 42 (logout), 44-47 (Google OIDC, `users` nullable); historias US-01, US-03, US-04, US-07, US-08; diagramas 3-4 del doc 02.
 **Cómo leer**: cada tabla traza columna a columna su origen en la sección [Trazabilidad](#trazabilidad-columna--fuente). Las decisiones que el modelo toma más allá de la literalidad del plan están explicadas en [Decisiones derivadas](#decisiones-derivadas).
 
@@ -12,6 +12,7 @@
 erDiagram
     users ||--o{ refresh_tokens : "posee"
     users ||--o{ magic_links : "solicita"
+    users ||--o{ otp_codes : "solicita"
 
     users {
         text id PK "UUID v4"
@@ -28,7 +29,7 @@ erDiagram
         text user_id FK "users.id"
         text family_id "familia de rotación"
         text status "active · used · revoked"
-        text provider "local · google · magic"
+        text provider "local · google · magic · otp"
         text expires_at "ISO 8601 UTC · 7-30 días"
         text created_at "ISO 8601 UTC"
     }
@@ -40,6 +41,16 @@ erDiagram
         text purpose "login · password_reset (US-12)"
         text status "pending · used · revoked"
         text expires_at "ISO 8601 UTC · TTL corto (15 min default)"
+        text created_at "ISO 8601 UTC"
+    }
+
+    otp_codes {
+        text id PK "UUID v4"
+        text email "destinatario (normalizado)"
+        text code_hash "argon2id del código de 6 dígitos"
+        text status "pending · used · revoked"
+        int attempts "fallos acumulados · máx 5"
+        text expires_at "ISO 8601 UTC · TTL corto (5 min default)"
         text created_at "ISO 8601 UTC"
     }
 ```
@@ -68,7 +79,7 @@ CREATE TABLE refresh_tokens (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   family_id  TEXT NOT NULL,                                       -- familia de rotación: UUID de sesión por login
   status     TEXT NOT NULL CHECK (status IN ('active', 'used', 'revoked')),
-  provider   TEXT CHECK (provider IN ('local', 'google', 'magic')), -- origen de la sesión (informacional)
+  provider   TEXT CHECK (provider IN ('local', 'google', 'magic', 'otp')), -- origen de la sesión (informacional)
   expires_at TEXT NOT NULL,                                       -- vigencia 7-30 días (ISO 8601 UTC)
   created_at TEXT NOT NULL,                                       -- ISO 8601 UTC
 ) STRICT;
@@ -88,6 +99,20 @@ CREATE INDEX idx_refresh_tokens_user_id   ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_family_id ON refresh_tokens(family_id);
 CREATE INDEX idx_magic_links_email   ON magic_links(email);
 CREATE INDEX idx_magic_links_status  ON magic_links(status);
+
+-- otp_codes: códigos de acceso de 6 dígitos por email (US-13/US-14)
+CREATE TABLE otp_codes (
+  id         TEXT PRIMARY KEY,                                    -- UUID v4 (VOs: OtpCodeId)
+  email      TEXT NOT NULL,                                       -- destinatario normalizado (VOs: Email)
+  code_hash  TEXT NOT NULL,                                       -- argon2id del código (nunca claro; doc 00 → ítem 34)
+  status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')), -- (VOs: OtpStatus)
+  attempts   INTEGER NOT NULL DEFAULT 0,                          -- fallos acumulados; >= 5 revoca el código
+  expires_at TEXT NOT NULL,                                       -- TTL corto: 5 min default (OTP_TTL_MINUTES)
+  created_at TEXT NOT NULL                                        -- ISO 8601 UTC
+) STRICT;
+
+CREATE INDEX idx_otp_codes_email  ON otp_codes(email);
+CREATE INDEX idx_otp_codes_status ON otp_codes(status);
 ```
 
 Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
@@ -143,6 +168,18 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `expires_at` | US-09 AC-04 (TTL corto, default 15 min; vencido → `MAGIC_LINK_INVALID`, US-10 AC-05) |
 | `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD) |
 
+### `otp_codes`
+
+| Columna | Fuente |
+|---|---|
+| `id` | convención `id UUID v4` (doc 00 → nº 45) aplicada a los códigos |
+| `email` | US-13 AC-01 (destinatario; el código se emite para un email, exista o no cuenta — anti-enumeración + auto-cuenta US-14 AC-04) |
+| `code_hash` | doc 00 → nº 35 (argon2id) aplicado al código de 6 dígitos: **nunca claro** y, a diferencia del magic link (token opaco 32B servible con SHA-256), el hash lento protege un espacio de búsqueda de solo 10^6 (US-13 AC-02) |
+| `status` | US-14 AC-02 (`used` tras una verificación → un solo uso); `revoked` tras agotar intentos (US-14 AC-03) o por rotación (US-13 AC-03); `pending` inicial. Un único enum evita estados imposibles (mismo racional que decisión 7) |
+| `attempts` | US-14 AC-03 (máx **5** intentos: `attempts >= 5` revoca el código y fuerza un nuevo request); se incrementa solo en fallos de código |
+| `expires_at` | US-13 AC-02 (TTL corto, default 5 min, máx 15; vencido → `OTP_INVALID`, US-14 AC-02) |
+| `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD) |
+
 ---
 
 ## 4. Decisiones derivadas
@@ -154,9 +191,12 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | 3 | **Logout = soft-revoke** (`status='revoked'`), nunca `DELETE` | Reconciliación de doc 00 → nº 42 («borrarlo de DB») con US-04 AC-02: borrar físicamente rompería la detección de reuso post-logout. El ítem 42 se interpreta como **borrado lógico** (ver tabla de correspondencia y nota del diagrama 4 en doc 02) |
 | 4 | **`google_sub UNIQUE`** | `findByGoogleSub` (diagrama 5) debe resolver un solo usuario; `UNIQUE` hace la colisión Google-Google imposible a nivel BD (análogo a US-01 AC-06 para email) |
 | 5 | **CHECK de identidad `users` ampliado** a `... OR email_verified = 1` | Un usuario solo-magic (creado por auto-cuenta en US-10 AC-02) no tiene `password_hash` ni `google_sub`; su email ya está verificado por posesión. Sin la ampliación, la CHECK original `(password_hash IS NOT NULL OR google_sub IS NOT NULL)` impediría persistir el alta implícita |
-| 6 | **`provider = 'magic'` en refresh_tokens y CHECK ampliado** | Las sesiones emitidas al consumir un magic link (US-10 AC-01) usan nuestros refresh (doc 00 → nº 47); `provider` informa su origen. La CHECK pasa de `('local','google')` a `('local','google','magic')` |
+| 6 | **`provider = 'magic'`/`'otp'` en refresh_tokens y CHECK ampliado** | Las sesiones emitidas al consumir un magic link (US-10 AC-01) o verificar un OTP (US-14 AC-01) usan nuestros refresh (doc 00 → nº 47); `provider` informa su origen. La CHECK pasa de `('local','google')` a `('local','google','magic')` (US-10) y luego `('local','google','magic','otp')` (US-14) |
 | 7 | **`magic_links.status` único** (`pending`/`used`/`revoked`) sin flags | Mismo racional que la decisión 1 aplicado a los enlaces: un solo consumo (`used`) marca el fin de la vida útil; `revoked` queda reservado para revocación proactiva futura |
 | 8 | **`magic_links.purpose`** (`login`/`password_reset`, default `'login'`) | Separa los canales `login` (US-09/10) y `password_reset` (US-12) sobre la misma tabla: un enum (no un flag) impide estados imposibles y `DEFAULT 'login'` hace retrocompatible la migración 0002 (las filas copiadas heredan el canal de sesión). Refuerza **F3**: un enlace de un canal no funciona en el otro (consume solo `login`, reset solo `password_reset`) |
+| 9 | **`otp_codes.status` único** (`pending`/`used`/`revoked`) sin flags | Mismo racional que la decisión 7 aplicado a los códigos: `used` tras una verificación (un solo uso, US-14 AC-02), `revoked` tras 5 fallos (US-14 AC-03) o por rotación con un request nuevo (US-13 AC-03) |
+| 10 | **`otp_codes.attempts`** (`INTEGER NOT NULL DEFAULT 0`) como contador de fallos | El límite de 5 intentos (US-14 AC-03) necesita persistencia para sobrevivir reinicios del server (a diferencia del rate limit de red, doc 00 → nº 41); la revocación al llegar al límite fuerza un nuevo request (rotación) |
+| 11 | **`otp_codes` SIN FK a `users`** | El código existe para un email, registrado o no (anti-enumeración US-13 AC-01 + auto-cuenta US-14 AC-04): una FK exigiría el usuario y rompería el flujo de alta implícita. El email es el ancla, como en `magic_links` |
 
 ---
 
@@ -168,7 +208,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `sessions` | ❌ No hay tabla | La «sesión» persiste como refresh token activo agrupado por `family_id` (una familia = una sesión); listar sesiones por dispositivo es iteración futura (doc 01 → nº 161) |
 | `rate_limits` | ❌ No hay tabla | Rate limiting en memoria/aplicación (doc 00 → nº 41, 49), no persistente |
 | `google_refresh_tokens` | ❌ No hay tabla | Nunca se pide ni guarda el refresh de Google (doc 00 → nº 47); las sesiones Google usan nuestros `refresh_tokens` |
-| `email_verification_tokens` | ❌ No hay tabla (separada) | La verificación de email se resuelve con `magic_links` (US-09/10): el mismo enlace que autentica prueba la posesión del email (`email_verified = 1`). No hace falta una tabla independiente de confirmación de email |
+| `email_verification_tokens` | ❌ No hay tabla (separada) | La verificación de email se resuelve con `magic_links` (US-09/10) y `otp_codes` (US-13/14): el mismo enlace/código que autentica prueba la posesión del email (`email_verified = 1`). No hace falta una tabla independiente de confirmación de email |
 | Migraciones | 📁 Versionadas (Drizzle, doc 00 → nº 32) | El esquema evoluciona con migraciones SQL versionadas, no con sync automático |
 
 ---
@@ -177,5 +217,5 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 
 - Drizzle define el mismo esquema 1:1 (doc 00 → nº 30-33); `better-sqlite3` con `foreign_keys = ON` y WAL.
 - Tipos nativos: `TEXT` para UUID/ISO-8601/JTI y `INTEGER` para `email_verified` (SQLite no distingue más; los VOs del dominio (doc 02 → diagrama 6) validan la semántica en la frontera).
-- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`, `MagicLinkPurpose → magic_links.purpose`.
-- Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por refresh token_hash y por magic token_hash — únicos ya indexados; por user_id, family_id, magic email y magic status en índices separados).
+- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email`, `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`, `MagicLinkPurpose → magic_links.purpose`, `OtpCode → otp_codes.code_hash` (solo hash; el código claro nunca se persiste), `OtpStatus → otp_codes.status`.
+- Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por refresh token_hash y por magic token_hash — únicos ya indexados; por user_id, family_id, magic email y magic status en índices separados; por otp email y otp status en índices separados).
