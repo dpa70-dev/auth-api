@@ -13,6 +13,7 @@ import {
   magicLinkPurposeValues,
   magicLinkStatusSchema,
   magicLinkStatusValues,
+  otpStatusValues,
   providerValues,
   refreshTokenStatusSchema,
   refreshTokenStatusValues,
@@ -99,5 +100,26 @@ export const magicLinks = sqliteTable(
     check('magic_links_status_check', sql`${t.status} IN (${inList(magicLinkStatusValues)})`),
     // doc 04 → magic_links: CHECK derivado de magicLinkPurposeValues
     check('magic_links_purpose_check', sql`${t.purpose} IN (${inList(magicLinkPurposeValues)})`),
+  ],
+);
+
+export const otpCodes = sqliteTable(
+  'otp_codes',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    // Solamente el hash argon2id del código se persiste (doc 00 → ítem 34).
+    codeHash: text('code_hash').notNull(),
+    status: text('status', { enum: otpStatusValues }).notNull().default('pending'),
+    // Intentos inválidos acumulados; >= OTP_MAX_ATTEMPTS revoca el código.
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: text('expires_at').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('otp_codes_email_idx').on(t.email),
+    index('otp_codes_status_idx').on(t.status),
+    // doc 04 → otp_codes: CHECK derivado de otpStatusValues
+    check('otp_codes_status_check', sql`${t.status} IN (${inList(otpStatusValues)})`),
   ],
 );
