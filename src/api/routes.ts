@@ -32,6 +32,8 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     passwordResetHandler,
     otpRequestHandler,
     otpVerifyHandler,
+    guestHandler,
+    guestUpgradeHandler,
     meHandler,
   } = buildHandlers(useCases, deps);
 
@@ -51,6 +53,10 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     // US-13/14: el código OTP ES la credencial → solo authLimiter (sin requireAuth).
     { method: 'post', path: API_PATHS.otpRequest, guards: [authLimiter(deps.config)], handler: otpRequestHandler },
     { method: 'post', path: API_PATHS.otpVerify, guards: [authLimiter(deps.config)], handler: otpVerifyHandler },
+    // US-15: sesión guest anónima → solo throttle /auth (crear sesión NO requiere identidad).
+    { method: 'post', path: API_PATHS.guest, guards: [authLimiter(deps.config)], handler: guestHandler },
+    // US-16: reclama identidad sobre la sesión guest → requireAuth (debe estar autenticado) + throttle.
+    { method: 'post', path: API_PATHS.guestUpgrade, guards: [requireAuth(deps.tokens), authLimiter(deps.config)], handler: guestUpgradeHandler },
     { method: 'get', path: API_PATHS.me, guards: [requireAuth(deps.tokens)], handler: meHandler },
   ];
 

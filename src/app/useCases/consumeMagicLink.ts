@@ -16,7 +16,7 @@ export type ConsumeMagicLinkCommand = {
 export type ConsumeMagicLinkResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email; createdAt: string };
+  user: { id: UserId; email: Email | null; kind: 'registered'; createdAt: string };
 };
 
 export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, ConsumeMagicLinkResult> {
@@ -92,7 +92,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id: userId, email: user ? user.email : found.email, createdAt: user ? user.createdAt : now.toISOString() },
+      user: { id: userId, email: user ? user.email : found.email, kind: userKindSchema.enum.registered, createdAt: user ? user.createdAt : now.toISOString() },
     };
   }
 }

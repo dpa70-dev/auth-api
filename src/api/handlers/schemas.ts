@@ -51,3 +51,10 @@ export const otpVerifyRequest = z.object({
   email: emailSchema,
   code: otpCodeSchema,
 });
+
+/** POST /auth/guest/upgrade (US-16): email + password para reclamar la cuenta guest.
+ *  Solo valida SHAPE (VOs brandeados); el chequeo de comprometidas vive en el use case. */
+export const upgradeGuestRequest = z.object({
+  email: emailSchema,
+  password: plainPasswordSchema,
+});

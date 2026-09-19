@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
-import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId, type UserKind } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -19,7 +19,7 @@ export type LoginGoogleCommand = {
 export type LoginGoogleResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email; createdAt: string };
+  user: { id: UserId; email: Email | null; kind: UserKind; createdAt: string };
 };
 
 export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResult> {
@@ -74,11 +74,16 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
       throw err;
     }
 
-    return this.withSession({ id, email: claims.email, createdAt: now.toISOString() }, providerSchema.enum.google, now, cmd.refreshTtlDays);
+    return this.withSession(
+      { id, email: claims.email, kind: userKindSchema.enum.registered, createdAt: now.toISOString() },
+      providerSchema.enum.google,
+      now,
+      cmd.refreshTtlDays,
+    );
   }
 
   private async withSession(
-    user: { id: UserId; email: Email; createdAt: string },
+    user: { id: UserId; email: Email | null; kind: UserKind; createdAt: string },
     provider: Provider,
     now: Date,
     refreshTtlDays: number,

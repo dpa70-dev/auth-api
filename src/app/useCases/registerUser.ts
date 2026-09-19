@@ -26,7 +26,7 @@ export type RegisterUserCommand = {
 export type RegisterUserResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email; createdAt: string };
+  user: { id: UserId; email: Email; kind: 'registered'; createdAt: string };
 };
 
 export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserResult> {
@@ -90,7 +90,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id, email: cmd.email, createdAt: now.toISOString() },
+      user: { id, email: cmd.email, kind: userKindSchema.enum.registered, createdAt: now.toISOString() },
     };
   }
 }

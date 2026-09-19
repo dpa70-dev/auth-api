@@ -20,7 +20,7 @@ export type VerifyOtpCommand = {
 export type VerifyOtpResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email; createdAt: string };
+  user: { id: UserId; email: Email | null; kind: 'registered'; createdAt: string };
 };
 
 /**
@@ -102,7 +102,7 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id: userId, email: user ? user.email : cmd.email, createdAt: user ? user.createdAt : now.toISOString() },
+      user: { id: userId, email: user ? user.email : cmd.email, kind: userKindSchema.enum.registered, createdAt: user ? user.createdAt : now.toISOString() },
     };
   }
 }

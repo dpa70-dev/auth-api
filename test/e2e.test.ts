@@ -262,7 +262,7 @@ describe('US-05 — GET protegido /auth/me', () => {
     const res = await get(`${ctx.baseUrl}/auth/me`, data.accessToken);
     expect(res.status).toBe(200);
     const body = await readJson<{ data: MeData }>(res);
-    expect(body.data).toEqual({ id: body.data.id, email: 'me@example.com', createdAt: body.data.createdAt });
+    expect(body.data).toEqual({ id: body.data.id, email: 'me@example.com', kind: 'registered', createdAt: body.data.createdAt });
     expect(body.data.email).toBe('me@example.com');
   });
 
