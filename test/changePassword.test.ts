@@ -22,11 +22,15 @@ const readJson = async <T>(res: Response): Promise<T> => (await res.json()) as T
 class FakeEmailSender implements EmailSender {
   sent: { to: string; url: string }[] = [];
   sentReset: { to: string; url: string }[] = [];
+  sentOtp: { to: string; code: string }[] = [];
   async sendMagicLink({ to, url }: { to: Email; url: string }): Promise<void> {
     this.sent.push({ to, url });
   }
   async sendPasswordResetEmail({ to, url }: { to: Email; url: string }): Promise<void> {
     this.sentReset.push({ to, url });
+  }
+  async sendOtpCode({ to, code }: { to: Email; code: string }): Promise<void> {
+    this.sentOtp.push({ to, code });
   }
   lastUrl(): string {
     const last = this.sent.at(-1);

@@ -13,6 +13,8 @@ export * from './googleSub.js';
 export * from './jti.js';
 export * from './magicLinkPurpose.js';
 export * from './magicLinkStatus.js';
+export * from './otpCode.js';
+export * from './otpStatus.js';
 export * from './passwordHash.js';
 export * from './plainPassword.js';
 export * from './provider.js';

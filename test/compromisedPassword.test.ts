@@ -13,9 +13,13 @@ const silentLogger: Logger = { info() {}, warn() {}, error() {} };
 /** Fake del puerto EmailSender: captura el canal de reset para consumir el magic link. */
 class FakeEmailSender implements EmailSender {
   sentReset: { to: string; url: string }[] = [];
+  sentOtp: { to: string; code: string }[] = [];
   async sendMagicLink(): Promise<void> {}
   async sendPasswordResetEmail({ to, url }: { to: Email; url: string }): Promise<void> {
     this.sentReset.push({ to, url });
+  }
+  async sendOtpCode({ to, code }: { to: Email; code: string }): Promise<void> {
+    this.sentOtp.push({ to, code });
   }
   lastResetUrl(): string {
     const last = this.sentReset.at(-1);
