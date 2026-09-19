@@ -89,7 +89,7 @@ Registrados durante el QA. Estado de cierre:
 
 ## 10. Cierre del QA (estado al 31-ago-2026)
 
-- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓. *(Conteo al cierre del 31-ago-2026; el estado vigente del repo es `vitest` **136/136** en 15 archivos — ver §16.)*
+- Todos los temas de las fases 0–6 aplicados y verificados: `typecheck` ✓ · `lint` ✓ · `vitest` **34/34** ✓ · `build` ✓. *(Conteo al cierre del 31-ago-2026; el estado vigente del repo es `vitest` **165/165** en 19 archivos — ver §16/§17.)*
 - De los pendientes del tintero: **los 4 resueltos** — #1 (`GOOGLE_ISSUER` en `.env.example`), #2 (canal Swagger → editor.swagger.io), #3 (fallback `iat`/`exp`) y #4 (nonce anti-replay condicional + typo `verifyyy`).
 - Greps de referencia cruzada confirman: **0** referencias residuales a lo eliminado, **0** re-exports de tipos ajenos en las capas, dominio autónomo (0 imports hacia artefactos externos).
 
@@ -184,7 +184,7 @@ Implementación completa del flujo de magic link (US-09/US-10) siguiendo el plan
 - CHECK de identidad `users` ampliado (`... OR email_verified = 1`, doc 04 → decisión 5) y CHECK de `provider` ampliado a `magic` — el alta implícita de auto-cuenta es persistible.
 - `ConsumeMagicLink` reutiliza `TokenIssuer.issueSession` (misma emisión/rotación que `/login` y `/google`); las sesiones magic usan nuestros refresh (doc 00 → ítem 47).
 
-**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓. *(Conteo al 3-sep-2026; el estado vigente del repo es `vitest` **136/136** en 15 archivos — acceso por OTP (US-13/14), transporte dual, rate limiting global, tipado contra contrato: ver §16, docs/05 §11, docs/08 y commit `1c2b8ef`/`b526789`.)*
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **44/44** (34 previos + 10 nuevos de magic link en `test/magicLink.test.ts`) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado con `openapi-typescript` ✓. *(Conteo al 3-sep-2026; el estado vigente del repo es `vitest` **165/165** en 19 archivos — OTP (US-13/14) y guest (US-15/16): ver §16/§17, docs/05 §11, docs/08 y commits `1c2b8ef`/`b526789`.)*
 
 ---
 
@@ -210,4 +210,28 @@ Implementación completa del flujo OTP (US-13/US-14) siguiendo el plan aprobado 
 - **Unit of Work (doc 13 → §13.1)**: verificación argon2 + lectura de usuario + emisión jose **fuera** de la tx; dentro, solo las escrituras atómicas (auto-cuenta/`markEmailVerified` + `markStatus(used)` + `insertRefreshToken`).
 - Errores solo desde catálogo: `OTP_INVALID` (sin literales en call-sites) → 401 en `errorMiddleware`; `LOG_EVENTS` OTP_* para trazabilidad.
 
-**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **136/136** en 15 archivos (106 previos + 30 nuevos: `otpCode.test.ts` 7 + `requestOtp.test.ts` 3 + `verifyOtp.test.ts` 9 + `otp.test.ts` 11) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado ✓ · merge `feat/otp` a main `--no-ff` ✓. *(Estado vigente del repo al 19-sep-2026.)*
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **136/136** en 15 archivos (106 previos + 30 nuevos: `otpCode.test.ts` 7 + `requestOtp.test.ts` 3 + `verifyOtp.test.ts` 9 + `otp.test.ts` 11) ✓ · `build` ✓ · OpenAPI validado con `@redocly/cli` (0 errores) ✓ · `src/contract.ts` regenerado ✓ · merge `feat/otp` a main `--no-ff` ✓. *(Estado al cierre de OTP; el estado vigente del repo al 19-sep-2026 es `vitest` **165/165** en 19 archivos — ver §17.)*
+
+---
+
+## 17. Tema tratado — Cuenta de invitado guest (19-sep-2026)
+
+Implementación completa del flujo guest (US-15/US-16) siguiendo el plan aprobado en `.omo/plans/otp-guest.md` (Track B).
+
+**Decisiones del plan (ratificadas por el usuario)**:
+- **`kind` = discriminador de tipo de cuenta, NO rol**: columna `users.kind` (`'registered'`/`'guest'`, VO `UserKind`, DEFAULT `'registered'` retrocompatible — las filas preexistentes quedan registradas sin migración de datos). Roles/autorización (futura `role`) y estados de moderación son ejes independientes que `kind` NO absorbe (sin kitchen-sink — SRP).
+- **`users.email` nullable**: el guest no tiene identidad; `email` pasa a nullable en el esquema y el **unique index sigue válido** (SQLite tolera múltiples NULL). Migración `0005` = table-rebuild verificada (INSERT copia datos; la columna `kind` se omite del SELECT y el DEFAULT `'registered'` la llena — corrección a mano de drizzle-kit).
+- **CHECK de identidad ampliado**: `(password_hash IS NOT NULL OR google_sub IS NOT NULL OR email_verified = 1 OR kind = 'guest')` — el guest es la única cuenta que puede existir sin identidad.
+- **Cada request crea un guest nuevo** (sin dedup); sesión emitida con `provider = 'guest'`; el guest navega endpoints protegidos (US-15 AC-04).
+- **Upgrade NO revoca sesiones** (decisión aprobada): la sesión guest (access + refresh) sigue sirviendo tras reclamar email+password; `email_verified` queda `0` (se verifica después vía magic link/OTP, como un registro local).
+- **409 para ambos fallos de upgrade**: `GUEST_UPGRADE_INVALID` (cuenta no guest) + `EMAIL_ALREADY_EXISTS` (email ocupado); password validada con la misma pipeline de US-01 (fuerza NIST + compromised); `requireAuth` obligatorio (es un upgrade de la propia cuenta).
+
+**Verificación de arquitectura**:
+- VO `UserKind` (`userKindValues`, zod enum) en `domain/vo/` + `providerValues` ampliado a `['local','google','magic','otp','guest']` (doc 04 → decisión 6).
+- Entidad `User`/`NewUser`: `email: Email | null` + `kind: UserKind`; refine de identidad actualizado (guest permitido sin identidad).
+- `CreateGuestSession` y `UpgradeGuestAccount` injetan los puertos existentes (`UserRepository`, `PasswordHasher`, `CompromisedPasswordChecker`, `TokenIssuer`, `UnitOfWork`) — DIP respetado; sin puertos nuevos (reutiliza todo el molde).
+- Unit of Work (doc 13 → §13.1): verificación/hasheo **fuera** de la tx; dentro solo las escrituras (insert usuario + refresh / update email+password+kind).
+- Errores solo desde catálogo: `GUEST_UPGRADE_INVALID` → 409 en `errorMiddleware`; `LOG_EVENTS` `GUEST_SESSION_CREATED`/`GUEST_UPGRADED`.
+- Drift del contrato (T8: `email` nullable + `kind` en User) resuelto en los 6 use cases que emiten sesiones: resultados con `email: Email | null` + `kind` (`'registered'` en login/register/otp/magic, `UserKind` en google); `getMe` devuelve `user.kind`. Todos los handlers vuelven a tipar contra `AuthResponseData`/`UserProfileData` (sin `as any`).
+
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **165/165** en 19 archivos (154 previos + 11 nuevos en `test/guest.test.ts`: creación/me/refresh/upgrade/409s/401/422/429) ✓ · `build` ✓ · smoke curl guest→me→upgrade→me OK ✓ · merge `feat/guest-user` a main `--no-ff` ✓. *(Estado vigente del repo al 19-sep-2026.)*

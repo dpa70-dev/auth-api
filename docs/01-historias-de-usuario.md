@@ -253,6 +253,42 @@
 
 ---
 
+## US-15 · Crear sesión de invitado (guest)
+
+**Como** usuario anónimo que aún no quiere registrarse, **quiero** obtener una sesión sin email ni contraseña, **para** explorar la app y reclamar mi cuenta más tarde.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado `POST /auth/guest` sin body, cuando el cliente lo llama, entonces obtengo `200 AuthResponse` con `user.kind = 'guest'`, `user.email = null`, y un par access+refresh **funcional** (el refresh rota en `/auth/refresh` como cualquier sesión, diagrama 3).
+- **AC-02** — Cada request crea un **guest nuevo** (sin dedup): dos llamadas → dos cuentas y dos sesiones distintas.
+- **AC-03** — El guest existe sin identidad: `users.email = NULL`, `password_hash = NULL`, `google_sub = NULL`, `email_verified = 0`, `kind = 'guest'` (habilitado por el CHECK de identidad ampliado, doc 04 → decisión 12).
+- **AC-04** — El guest navega por los endpoints protegidos como cualquier usuario autenticado (`/auth/me` responde `200` con `email: null` y `kind: 'guest'`).
+- **AC-05** — La sesión se emite con `provider = 'guest'` en `refresh_tokens` (doc 04 → decisión 6).
+- **AC-06** — El endpoint está bajo el rate limit de auth → `429` al excederlo.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/guest` · sin body · respuestas 200/429/500. La cuenta es **temporal y sin identidad** (no puede loguearse por sí sola); `kind` es un discriminador de tipo de cuenta, **no un rol** (doc 04 → bloque `users.kind`).
+
+---
+
+## US-16 · Reclamar una cuenta de invitado (upgrade)
+
+**Como** usuario con una sesión de invitado, **quiero** reclamar un email + contraseña sobre mi cuenta guest, **para** convertirla en una cuenta `'registered'` que pueda reutilizar.
+
+**Criterios de aceptación:**
+
+- **AC-01** — Dado `POST /auth/guest/upgrade` con `{ email, password }` y el Bearer de una sesión guest, cuando el email es libre y la password es válida, entonces obtengo `200` con el perfil actualizado (`kind = 'registered'`, `email` seteado, `email_verified = false`).
+- **AC-02** — **No revoca sesiones**: la sesión guest (refresh y access) sigue sirviendo después del upgrade (`/auth/me` responde el perfil registrado).
+- **AC-03** — Email ya usado por otra cuenta → `409 EMAIL_ALREADY_EXISTS` (misma semántica que US-01).
+- **AC-04** — Cuenta autenticada que **no** es guest → `409 GUEST_UPGRADE_INVALID`.
+- **AC-05** — Sin Bearer → `401` (el upgrade requiere sesión: guards `[requireAuth, authLimiter]`).
+- **AC-06** — La password se valida igual que en US-01 (fuerza NIST + compromised checker) → `422`/respuesta de rechazo; el email fuera de formato → `422`.
+- **AC-07** — Tras el upgrade, el email cuenta como **no verificado** (`email_verified = 0`): se verifica después vía magic link/OTP (US-09/10, US-13/14), igual que un registro local.
+- **AC-08** — El endpoint está bajo el rate limit de auth → `429`.
+
+**Notas para la especificación (fase 2)**: `POST /api/v1/auth/guest/upgrade` · Bearer obligatorio · body `{ email, password }` · respuestas 200/401/409/422/429/500.
+
+---
+
 ## Fuera de alcance (para fases futuras)
 
 - ~~Verificación de email~~ — **resuelto con magic link (US-09/10)**: emails locales se verifican al consumir un enlace (`email_verified = 1`); sigue aplicando que los de Google vienen verificados por OIDC.
@@ -263,6 +299,7 @@
 - Gestión multi-dispositivo / listado de sesiones activas.
 - Entrega de tokens vía cookie httpOnly — decidido: header `Authorization: Bearer` por defecto en este ejemplo (ver doc 00 → nº 39, trade-off documentado).
 - Revocación global / blocklist de access tokens (no necesaria con expiración corta).
+- **Expiración / cleanup automático de cuentas guest** — los guests (US-15/16) no tienen TTL ni barrido; la cuenta anónima vive hasta que se reclama (`kind = 'registered'`) o se borra manualmente.
 
 ---
 
@@ -275,3 +312,4 @@
 5. *(Resuelto el 3-sep-2026)*: **magic link (US-09/10)** — contrato (doc 03), modelo `magic_links` (doc 04), diagrama 6 (doc 02), consideraciones nº 55 (doc 00) e implementación completa con 10 tests nuevos en `test/magicLink.test.ts` (56 total).
 6. *(Resuelto el 5-sep-2026)*: **cambio y recuperación de contraseña (US-11/12)** — `intent`/`purpose` en el contrato (doc 03), columna `magic_links.purpose` (doc 04), flujo de reset en el diagrama 6 (doc 02), consideración nº 56 (doc 00) e implementación con 18 tests nuevos en `test/changePassword.test.ts` (7) y `test/passwordReset.test.ts` (11) — **74 total**.
 7. *(Resuelto el 19-sep-2026)*: **OTP por email (US-13/14)** — contrato (doc 03), tabla `otp_codes` + `provider 'otp'` (doc 04), diagrama 6.2 (doc 02), consideración nº 57 (doc 00) e implementación con 30 tests nuevos en `test/otpCode.test.ts` (7), `test/requestOtp.test.ts` (3), `test/verifyOtp.test.ts` (9) y `test/otp.test.ts` (11) — **136 total en 15 archivos**.
+8. *(Resuelto el 19-sep-2026)*: **usuario invitado guest (US-15/16)** — `users.email` nullable + `kind` (doc 04 → decisión 12 + bloque `users.kind`), diagrama 6.3 (doc 02), consideración nº 58 (doc 00) e implementación con 11 tests nuevos en `test/guest.test.ts` — **165 total en 19 archivos**.

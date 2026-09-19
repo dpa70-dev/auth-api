@@ -460,6 +460,65 @@ Notas del OTP:
 
 ---
 
+### 6.3 Cuenta de invitado (guest) — US-15/US-16
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant P as Presentación
+    participant A as Aplicación · CreateGuestSession / UpgradeGuestAccount
+    participant R as UserRepository
+    participant H as PasswordHasher
+    participant T as TokenService
+    participant DB as SQLite
+
+    Note over C,A: Creación (US-15) — sin body
+    C->>P: POST /api/v1/auth/guest
+    P->>A: CreateGuestSession(refreshTtlDays)
+
+    alt Rate limit excedido
+        P-->>C: 429 RATE_LIMITED (Retry-After: n)
+    else Válido — siempre se crea un guest nuevo (sin dedup, US-15 AC-02)
+        A->>R: createUser({ id: uuid, email: null, passwordHash: null, googleSub: null, kind: 'guest', emailVerified: false })
+        R->>DB: INSERT INTO users (...) — CHECK identidad pasa por kind = 'guest' (US-15 AC-03)
+        A->>T: emitirPar(user.id) — provider 'guest' (US-15 AC-05)
+        T-->>A: accessToken + refreshToken
+        A->>R: insertRefreshToken(refreshRow)
+        A-->>C: 200 { data: { accessToken, refreshToken, user: { email: null, kind: 'guest' } } }
+    end
+
+    Note over C,A: Reclamo / upgrade (US-16) — Bearer obligatorio
+    C->>P: POST /api/v1/auth/guest/upgrade { email, password }
+    P->>P: requireAuth → userId (401 sin Bearer, US-16 AC-05) · authLimiter
+    P->>A: UpgradeGuestAccount(userId, emailNormalizado, password, refreshTtlDays)
+    A->>R: findById(userId)
+
+    alt No existe / kind ≠ 'guest' → 409 GUEST_UPGRADE_INVALID (US-16 AC-04)
+        A-->>C: 409 GUEST_UPGRADE_INVALID
+    else Email ya usado por otra cuenta → 409 EMAIL_ALREADY_EXISTS (US-16 AC-03)
+        A->>R: findByEmail(email) → otra cuenta
+        A-->>C: 409 EMAIL_ALREADY_EXISTS
+    else Password inválida (fuerza/comprometida, misma pipeline que US-01, US-16 AC-06)
+        A-->>C: reject (422/compromised — igual que /register)
+    else Válido — dentro de la tx: solo las escrituras (US-16 AC-01)
+        Note over A,R: Fuera de tx: verificación fuerza/compromised + hashear (doc 13 → §13.1)
+        A->>A: passwordHash = argon2id(password)
+        A->>R: update: email + password_hash + kind = 'registered' (email_verified = 0, US-16 AC-07)
+        R->>DB: UPDATE users SET email = ?, password_hash = ?, kind = 'registered' WHERE id = ?
+        Note over A,R: NO se revoca ninguna sesión (US-16 AC-02 — decisión aprobada en plan)
+        A-->>C: 200 { data: { id, email, kind: 'registered', createdAt } }
+    end
+```
+
+Notas del guest:
+
+- **Entre US-15 y US-16**: la sesión del guest (access + refresh) **no se revoca** en el upgrade — el mismo refresh sigue rotando en `/auth/refresh` y `/auth/me` pasa a responder el perfil `'registered'` (US-16 AC-02).
+- **`kind` es eje de identidad, no rol** (US-15 notas / doc 04 → bloque `users.kind`): un guest puede navegar endpoints protegidos (AC-04) y un futuro guard de autorización por tipo de cuenta consultaría `kind`, sin ampliar el enum.
+- El upgrade **no verifica el email** (`email_verified` queda `0`): la verificación posterior va por magic link/OTP, igual que un registro local (US-16 AC-07).
+- El CHECK de identidad de `users` pasa a admitir la fila guest (`OR kind = 'guest'`); el unique index de `email` sigue válido (SQLite tolera múltiples NULL) — doc 04 → decisiones 12 y bloque `users.kind`.
+
+---
+
 ## 7. Arquitectura por capas y sus puertos
 
 ```mermaid
@@ -471,11 +530,11 @@ flowchart LR
     end
 
     subgraph APP[Aplicación]
-        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink · ChangePassword · ResetPassword · RequestOtp · VerifyOtp]
+        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink · ChangePassword · ResetPassword · RequestOtp · VerifyOtp · CreateGuestSession · UpgradeGuestAccount]
     end
 
     subgraph DOM[Dominio]
-        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus · MagicLinkPurpose · OtpCode · OtpStatus]
+        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus · MagicLinkPurpose · OtpCode · OtpStatus · UserKind]
         VA[«puerto» PasswordHasher]
         VB[«puerto» TokenService]
         VC[«puerto» UserRepository]
@@ -542,4 +601,5 @@ Notas:
 | 5. Login con Google | US-07, US-08 (AC-02) | 43-47 |
 | 6. Magic link (+ reset 6.1) | US-09, US-10, US-12 | 38, 41, 55, 56 |
 | 6.2 Código OTP | US-13, US-14 | 35, 38, 41, 47, 57 |
+| 6.3 Cuenta de invitado | US-15, US-16 | 38, 41, 45, 47, 58 |
 | 7. Capas y puertos | (transversal) | 25-28, 6.1 |
