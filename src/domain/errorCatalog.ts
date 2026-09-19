@@ -10,6 +10,7 @@ export const ERROR_CATALOG = [
   { code: 'EMAIL_ALREADY_EXISTS', message: 'Ya existe una cuenta con este email.' },
   { code: 'ACCOUNT_EXISTS_WITH_GOOGLE', message: 'Ya existe una cuenta con este email usando Google. Entrá con Google.' },
   { code: 'ACCOUNT_HAS_NO_PASSWORD', message: 'La cuenta no tiene una contraseña configurada.' },
+  { code: 'GUEST_UPGRADE_INVALID', message: 'La cuenta no es de tipo invitado.' },
   { code: 'EMAIL_NOT_VERIFIED', message: 'El email no está verificado en Google.' },
   { code: 'PASSWORD_COMPROMISED', message: 'La contraseña fue comprometida en una filtración conocida; elegí otra.' },
   { code: 'MAGIC_LINK_INVALID', message: 'Enlace de acceso inválido o expirado.' },
