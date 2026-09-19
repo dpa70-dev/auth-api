@@ -205,6 +205,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/otp/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Solicitar OTP (login sin contraseña)
+         * @description Genera y envía un código OTP por email (US-13). La respuesta `200 { data: { ok: true } }`
+         *     es **idéntica** exista o no el email, y se realiza la misma cantidad de trabajo (generar código,
+         *     persistir su hash, enviar email) en ambos casos — anti-enumeración estricta: ni la respuesta ni
+         *     un side-channel temporal revelan si la cuenta está registrada. El servidor persiste solo el
+         *     **hash argon2id** (Parámetros OWASP m=19456, t=2, p=1) del código OTP de 6 dígitos numéricos,
+         *     nunca el código en claro (doc 00 → ítem 34). El código expira en un TTL corto configurable
+         *     (`OTP_TTL_MINUTES`, default 5, máx 15). El OTP se consume en `/auth/otp/verify` (US-14): la
+         *     auto-cuenta se resuelve ahí — un código enviado a un email no registrado crea la cuenta
+         *     (`provider = 'otp'`, `email_verified = 1`).
+         */
+        post: operations["requestOtp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/otp/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verificar OTP (login por código)
+         * @description Intercambia un código OTP válido y vigente por el par de tokens (US-14). La respuesta
+         *     tiene la misma forma que `/auth/magic-link/consume` (el cliente no distingue el proveedor).
+         *     **Un solo uso**: el código se marca `used` al verificarse. Código inexistente, revocado o vencido → 401 `OTP_INVALID`, idéntico en forma (anti-enumeración).
+         *     **Auto-cuenta**: si el email del código no está registrado, se crea el usuario
+         *     (`provider = 'otp'`, `email_verified = 1`) y se responde 200 — misma regla que el consume
+         *     de magic link (US-10 AC-02). El código se solicita para el email que el usuario quiere
+         *     usar como login: verificar un código en un email ya registrado (local/Google/magic)
+         *     emite sesión sobre la cuenta existente.
+         */
+        post: operations["verifyOtp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/change-password": {
         parameters: {
             query?: never;
@@ -333,6 +388,26 @@ export interface components {
         MagicLinkConsumeRequest: {
             token: components["schemas"]["MagicLinkToken"];
         };
+        OtpRequest: {
+            email: components["schemas"]["Email"];
+        };
+        OtpVerifyRequest: {
+            email: components["schemas"]["Email"];
+            /**
+             * @description Código OTP de 6 dígitos.
+             * @example 123456
+             */
+            code: string;
+        };
+        OtpRequestResponse: {
+            data: {
+                /**
+                 * @description Siempre true — respuesta idéntica exista o no el email (anti-enumeración).
+                 * @example true
+                 */
+                ok: boolean;
+            };
+        };
         /**
          * @description JWT HS256 del proyecto. Claims: sub (users.id), iss, aud, exp, iat, nbf y jti.
          *     Vigencia 5-15 min. Algoritmo fijado en el servidor (jamás del header alg).
@@ -393,14 +468,15 @@ export interface components {
                 /**
                  * @description Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                  *     documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID,
-                 *     ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
+                 *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID, OTP_INVALID (código
+                 *     OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD y
+                 *     RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
                  *     filtraciones conocidas (NIST 800-63B §5.1.1.2); UNAUTHORIZED y MALFORMED_REQUEST
                  *     completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405
                  *     centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "OTP_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */
@@ -752,6 +828,71 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             /** @description Token inexistente, revocado o vencido — forma idéntica (anti-enumeración). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    requestOtp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OtpRequest"];
+            };
+        };
+        responses: {
+            /** @description Código OTP enviado (o no) — respuesta idéntica siempre (anti-enumeración). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OtpRequestResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    verifyOtp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OtpVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada; mismo contrato que `/auth/magic-link/consume`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Código inexistente, revocado o vencido — forma idéntica (anti-enumeración). */
             401: {
                 headers: {
                     [name: string]: unknown;

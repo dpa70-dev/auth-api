@@ -481,6 +481,111 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /auth/otp/request:
+    post:
+      tags: [Auth]
+      operationId: requestOtp
+      summary: Solicitar OTP (login sin contraseña)
+      description: |
+        Genera y envía un código OTP por email (US-13). La respuesta `200 { data: { ok: true } }`
+        es **idéntica** exista o no el email, y se realiza la misma cantidad de trabajo (generar código,
+        persistir su hash, enviar email) en ambos casos — anti-enumeración estricta: ni la respuesta ni
+        un side-channel temporal revelan si la cuenta está registrada. El servidor persiste solo el
+        **hash argon2id** (Parámetros OWASP m=19456, t=2, p=1) del código OTP de 6 dígitos numéricos,
+        nunca el código en claro (doc 00 → ítem 34). El código expira en un TTL corto configurable
+        (`OTP_TTL_MINUTES`, default 5, máx 15). El OTP se consume en `/auth/otp/verify` (US-14): la
+        auto-cuenta se resuelve ahí — un código enviado a un email no registrado crea la cuenta
+        (`provider = 'otp'`, `email_verified = 1`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+            examples:
+              valido:
+                summary: Payload válido (US-13)
+                value:
+                  email: ana@example.com
+      responses:
+        '200':
+          description: Código OTP enviado (o no) — respuesta idéntica siempre (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpRequestResponse'
+              examples:
+                ok:
+                  summary: OTP solicitado (US-13 AC-01/AC-02)
+                  value:
+                    data:
+                      ok: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      operationId: verifyOtp
+      summary: Verificar OTP (login por código)
+      description: |
+        Intercambia un código OTP válido y vigente por el par de tokens (US-14). La respuesta
+        tiene la misma forma que `/auth/magic-link/consume` (el cliente no distingue el proveedor).
+        **Un solo uso**: el código se marca `used` al verificarse. Código inexistente, revocado o vencido → 401 `OTP_INVALID`, idéntico en forma (anti-enumeración).
+        **Auto-cuenta**: si el email del código no está registrado, se crea el usuario
+        (`provider = 'otp'`, `email_verified = 1`) y se responde 200 — misma regla que el consume
+        de magic link (US-10 AC-02). El código se solicita para el email que el usuario quiere
+        usar como login: verificar un código en un email ya registrado (local/Google/magic)
+        emite sesión sobre la cuenta existente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerifyRequest'
+            examples:
+              valido:
+                summary: Payload válido
+                value:
+                  email: ana@example.com
+                  code: '123456'
+      responses:
+        '200':
+          description: Sesión iniciada; mismo contrato que `/auth/magic-link/consume`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Acceso por OTP (US-14 AC-01/AC-02/AC-03)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTA3MCwiZXhwIjoxNzg3ODcwNDcwLCJuYmYiOjE3ODc4NjkwNzAsImp0aSI6ImEwMWI1Y2NjIn0.ejemplo_firma
+                      refreshToken: v4.local.ejemplo-opaco-solo-server
+                      user:
+                        id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                        email: ana@example.com
+                        createdAt: '2026-08-27T10:15:30.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Código inexistente, revocado o vencido — forma idéntica (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /auth/change-password:
     post:
       tags: [Auth]
@@ -718,6 +823,39 @@ components:
       properties:
         token:
           $ref: '#/components/schemas/MagicLinkToken'
+    OtpRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+    OtpVerifyRequest:
+      type: object
+      required: [email, code]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
+        code:
+          type: string
+          description: Código OTP de 6 dígitos.
+          pattern: '^[0-9]{6}$'
+          example: '123456'
+    OtpRequestResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [ok]
+          additionalProperties: false
+          properties:
+            ok:
+              type: boolean
+              description: Siempre true — respuesta idéntica exista o no el email (anti-enumeración).
+              example: true
     AccessToken:
       type: string
       description: |
@@ -812,8 +950,9 @@ components:
               description: |
                 Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                 documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
-                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID,
-                ACCOUNT_HAS_NO_PASSWORD y RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
+                ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID, OTP_INVALID (código
+                OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD y
+                RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
                 filtraciones conocidas (NIST 800-63B §5.1.1.2); UNAUTHORIZED y MALFORMED_REQUEST
                 completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405
                 centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
@@ -824,6 +963,7 @@ components:
                 - ACCOUNT_EXISTS_WITH_GOOGLE
                 - EMAIL_NOT_VERIFIED
                 - MAGIC_LINK_INVALID
+                - OTP_INVALID
                 - ACCOUNT_HAS_NO_PASSWORD
                 - RATE_LIMITED
                 - PASSWORD_COMPROMISED
