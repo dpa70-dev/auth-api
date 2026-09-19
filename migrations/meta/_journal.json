@@ -29,6 +29,13 @@
       "when": 1789146367981,
       "tag": "0003_cloudy_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789836204180,
+      "tag": "0004_premium_warbound",
+      "breakpoints": true
     }
   ]
 }
