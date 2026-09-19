@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import type { UseCases } from '../app/buildUseCases.js';
 import { buildAuthHandlers } from './handlers/authHandlers.js';
 import { buildMagicLinkHandlers } from './handlers/magicLinkHandlers.js';
+import { buildOtpHandlers } from './handlers/otpHandlers.js';
 import { buildMeHandler } from './handlers/meHandler.js';
 import type { ApiDeps } from './deps.js';
 
@@ -16,6 +17,8 @@ export type Handlers = {
   magicLinkRequestHandler: RequestHandler;
   magicLinkConsumeHandler: RequestHandler;
   passwordResetHandler: RequestHandler;
+  otpRequestHandler: RequestHandler;
+  otpVerifyHandler: RequestHandler;
   meHandler: RequestHandler;
 };
 
@@ -23,5 +26,6 @@ export type Handlers = {
 export const buildHandlers = (useCases: UseCases, deps: ApiDeps): Handlers => ({
   ...buildAuthHandlers(useCases, deps),
   ...buildMagicLinkHandlers(useCases, deps),
+  ...buildOtpHandlers(useCases, deps),
   ...buildMeHandler(useCases),
 });

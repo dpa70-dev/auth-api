@@ -20,8 +20,8 @@ import cookieParser from 'cookie-parser';
 export type AppDeps = ComposeOverrides;
 
 export const buildApp = (overrides: AppDeps = {}) => {
-  const { users, hasher, tokens, google, magicLinks, sender, compromised, unitOfWork, logger, close } = composeInfra(overrides);
-  const useCases = buildUseCases({ users, hasher, tokens, google, magicLinks, sender, compromised, unitOfWork }, logger);
+  const { users, hasher, tokens, google, magicLinks, otpCodes, sender, compromised, unitOfWork, logger, close } = composeInfra(overrides);
+  const useCases = buildUseCases({ users, hasher, tokens, google, magicLinks, otpCodes, sender, compromised, unitOfWork }, logger);
 
   const app = express();
   app.disable('x-powered-by');

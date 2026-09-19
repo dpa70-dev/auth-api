@@ -13,5 +13,7 @@ export const API_PATHS = {
   magicLinkRequest: '/auth/magic-link/request',
   magicLinkConsume: '/auth/magic-link/consume',
   passwordReset: '/auth/password/reset',
+  otpRequest: '/auth/otp/request',
+  otpVerify: '/auth/otp/verify',
   me: '/auth/me',
 } as const;

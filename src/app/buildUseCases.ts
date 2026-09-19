@@ -4,6 +4,7 @@ import type {
   GoogleIdTokenVerifier,
   Logger,
   MagicLinkRepository,
+  OtpRepository,
   PasswordHasher,
   TokenIssuer,
   UnitOfWork,
@@ -21,6 +22,8 @@ import {
   GetMe,
   ChangePassword,
   ResetPassword,
+  RequestOtp,
+  VerifyOtp,
 } from './useCases/index.js';
 
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
@@ -29,6 +32,7 @@ export type Ports = {
   hasher: PasswordHasher;
   tokens: TokenIssuer;
   magicLinks: MagicLinkRepository;
+  otpCodes: OtpRepository;
   sender: EmailSender;
   /** Screen NIST 800-63B §5.1.1.2 contra contraseñas comprometidas (HIBP en prod, fake en tests). */
   compromised: CompromisedPasswordChecker;
@@ -45,6 +49,8 @@ export type UseCases = {
   logout: Logout;
   requestMagicLink: RequestMagicLink;
   consumeMagicLink: ConsumeMagicLink;
+  requestOtp: RequestOtp;
+  verifyOtp: VerifyOtp;
   me: GetMe;
   changePassword: ChangePassword;
   resetPassword: ResetPassword;
@@ -58,7 +64,7 @@ export type UseCases = {
  * en infra, que solo instancia implementaciones externas. La sesión se ensambla en index.ts.
  */
 export const buildUseCases = (
-  { users, hasher, tokens, magicLinks, sender, compromised, google, unitOfWork }: Ports,
+  { users, hasher, tokens, magicLinks, otpCodes, sender, compromised, google, unitOfWork }: Ports,
   logger: Logger,
 ): UseCases => ({
   registerUser: new RegisterUser(users, hasher, compromised, tokens, unitOfWork, logger),
@@ -67,6 +73,8 @@ export const buildUseCases = (
   logout: new Logout(users, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
   consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, unitOfWork, logger),
+  requestOtp: new RequestOtp(otpCodes, hasher, sender, logger),
+  verifyOtp: new VerifyOtp(users, otpCodes, hasher, tokens, unitOfWork, logger),
   me: new GetMe(users, logger),
   changePassword: new ChangePassword(users, hasher, compromised, logger),
   resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, unitOfWork, logger),

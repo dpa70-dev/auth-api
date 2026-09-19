@@ -21,3 +21,6 @@ export type UserProfileData = components['schemas']['UserResponse']['data'];
 
 /** Magic link request acknowledgement — requestMagicLink (200). */
 export type MagicLinkRequestData = components['schemas']['MagicLinkRequestResponse']['data'];
+
+/** OTP request acknowledgement — requestOtp (200). */
+export type OtpRequestData = components['schemas']['OtpRequestResponse']['data'];
