@@ -11,3 +11,4 @@ export { ResetPassword, type ResetPasswordCommand } from './resetPassword.js';
 export { RequestOtp, type RequestOtpCommand, type RequestOtpResult } from './requestOtp.js';
 export { VerifyOtp, OTP_MAX_ATTEMPTS, type VerifyOtpCommand, type VerifyOtpResult } from './verifyOtp.js';
 export { CreateGuestSession, type CreateGuestSessionCommand, type CreateGuestSessionResult } from './createGuestSession.js';
+export { UpgradeGuestAccount, type UpgradeGuestAccountCommand, type UpgradeGuestAccountResult } from './upgradeGuestAccount.js';

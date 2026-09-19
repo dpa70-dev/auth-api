@@ -6,7 +6,7 @@ import type {
   UserRepository,
 } from '../domain/port/index.js';
 import { refreshTokens, users } from '../db/schema.js';
-import { refreshTokenStatusSchema, type Email, type FamilyId, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../domain/vo/index.js';
+import { refreshTokenStatusSchema, userKindSchema, type Email, type FamilyId, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../domain/vo/index.js';
 import type { NewUser } from '../domain/entity/user.js';
 import { UniqueConstraintViolation } from '../domain/uniqueConstraintViolation.js';
 
@@ -119,6 +119,17 @@ export class DrizzleUserRepository implements UserRepository {
 
   async updatePasswordHash(userId: UserId, passwordHash: PasswordHash): Promise<void> {
     this.db.update(users).set({ passwordHash }).where(eq(users.id, userId)).run();
+  }
+
+  async upgradeGuestToRegistered(userId: UserId, email: Email, passwordHash: PasswordHash): Promise<void> {
+    try {
+      this.db.update(users).set({ email, passwordHash, kind: userKindSchema.enum.registered }).where(eq(users.id, userId)).run();
+    } catch (err) {
+      if (err instanceof Error && /UNIQUE|SQLITE_CONSTRAINT/i.test(err.message)) {
+        throw new UniqueConstraintViolation(err);
+      }
+      throw err;
+    }
   }
 }
 
