@@ -386,6 +386,80 @@ Notas del reset:
 
 ---
 
+### 6.2 Código OTP (solicitud + verificación) — US-13/US-14
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant P as Presentación
+    participant A as Aplicación · RequestOtp / VerifyOtp
+    participant O as OtpRepository
+    participant R as UserRepository
+    participant H as PasswordHasher
+    participant T as TokenService
+    participant E as EmailSender
+    participant DB as SQLite
+
+    Note over C,A: Solicitud (US-13)
+    C->>P: POST /api/v1/auth/otp/request { email }
+    P->>A: RequestOtp(emailNormalizado, otpTtlMinutes)
+
+    alt Payload inválido
+        P-->>C: 422 VALIDATION_ERROR (email malformado)
+    else Rate limit excedido
+        P-->>C: 429 RATE_LIMITED (Retry-After: n)
+    else Válido — siembre se genera/persiste/envía (anti-enumeración y auto-cuenta, US-13 AC-01)
+        A->>A: code = randomInt(0,1_000_000).padStart(6,'0')
+        A->>A: codeHash = argon2id(code) · expiresAt = now + OTP_TTL_MINUTES
+        A->>O: revokeAllForEmail(email) — un solo pendiente por email (US-13 AC-03)
+        A->>O: insert({ codeHash, email, status: 'pending', attempts: 0, expiresAt })
+        O->>DB: INSERT INTO otp_codes (...)
+        A->>E: sendOtpCode({ to, code })
+        A-->>C: 200 { data: { ok: true } } — idéntico exista o no el email
+    end
+
+    Note over C,A: Verificación (US-14)
+    C->>P: POST /api/v1/auth/otp/verify { email, code }
+    P->>A: VerifyOtp(email, code, refreshTtlDays)
+    A->>O: findPendingByEmail(email, now)
+    O->>DB: SELECT ... FROM otp_codes WHERE email = ? AND status = 'pending' AND expires_at > ?
+    DB-->>O: fila | null
+
+    alt Sin código pendiente (inexistente/vencido/usado) → 401 idéntico (anti-enumeración, US-14 AC-02)
+        A-->>C: 401 OTP_INVALID
+    else Intentos agotados (≥ 5, US-14 AC-03)
+        A->>O: markStatus(revoked) — invalida y fuerza un nuevo request
+        A-->>C: 401 OTP_INVALID
+    else Código erróneo
+        A->>H: verify(code, codeHash) → false
+        A->>O: incrementAttempts(id)
+        A-->>C: 401 OTP_INVALID
+    else Código correcto (verify → true)
+        A->>R: findByEmail(email)
+        alt Email NO está registrado (AUTO-CUENTA, US-14 AC-04)
+            Note over A,R: Alta implícita: provider 'otp', email_verified=1, sin password_hash ni google_sub (CHECK = email_verified permite la fila)
+            A->>R: createUser({ id: uuid, email, passwordHash: null, googleSub: null, emailVerified: true })
+        else Email ya registrado
+            A->>R: markEmailVerified(email) — prueba posesión del email (US-14 AC-05)
+        end
+        A->>T: emitirPar(user.id) — provider 'otp'
+        T-->>A: accessToken + refreshToken
+        A->>O: markStatus(used) — un solo uso (US-14 AC-02)
+        A->>R: insertRefreshToken(refreshRow)
+        A-->>C: 200 { data: { accessToken, refreshToken, user } } — mismo contrato que /login
+    end
+```
+
+Notas del OTP:
+
+- **Anti-enumeración estricta (US-13 AC-01)**: la respuesta `200 { ok: true }` y el trabajo realizado (generar + hashear + revocar anterior + insert + envío) son idénticos exista o no el email — sin side-channel temporal (misma opción B que US-09).
+- **Hash argon2id, no SHA-256 (US-13 AC-02)**: a diferencia del token opaco de 32 bytes del magic link, un código de 6 dígitos es brute-forceable offline; el hash lento (m=19456, t=2, p=1) encarece cada intento y la BD guarda solo `code_hash`. El límite de 5 intentos suma una segunda barrera.
+- **Un solo uso + rotación (US-13 AC-03 / US-14 AC-02)**: `markUsed` sobre el id tras el éxito (reuso → 401 `OTP_INVALID` idéntico); un nuevo request revoca (`revokeAllForEmail`) el pendiente anterior.
+- **401 OTP_INVALID indistinguible (US-14 AC-02/AC-03)**: inexistente, vencido, usado, código erróneo e intentos agotados responden el mismo código y misma forma — anti-enumeración + anti-bruteforce (errorMiddleware mapea `OTP_INVALID → 401`).
+- La verificación argon2, la lectura del usuario y la emisión jose van **fuera** de la tx; dentro solo las escrituras (auto-cuenta/verificación + `used` + refresh) — doc 13 → §13.1.
+
+---
+
 ## 7. Arquitectura por capas y sus puertos
 
 ```mermaid
@@ -397,17 +471,18 @@ flowchart LR
     end
 
     subgraph APP[Aplicación]
-        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink · ChangePassword · ResetPassword]
+        A[RegisterUser · Login · RefreshTokens · Logout · LoginGoogle · RequestMagicLink · ConsumeMagicLink · ChangePassword · ResetPassword · RequestOtp · VerifyOtp]
     end
 
     subgraph DOM[Dominio]
-        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus · MagicLinkPurpose]
+        V[VOs: Email · PlainPassword · PasswordHash · UserId · Jti · GoogleSub · Provider · EmailVerified · MagicLinkStatus · MagicLinkPurpose · OtpCode · OtpStatus]
         VA[«puerto» PasswordHasher]
         VB[«puerto» TokenService]
         VC[«puerto» UserRepository]
         VD[«puerto» Logger]
         VE[«puerto» MagicLinkRepository]
         VF[«puerto» EmailSender]
+        VG[«puerto» OtpRepository]
     end
 
     subgraph INF[Infraestructura]
@@ -417,6 +492,7 @@ flowchart LR
         ID[PinoLogger]
         IE[DrizzleMagicLinkRepository]
         IF[ConsoleEmailSender]
+        IG[DrizzleOtpRepository]
     end
 
     DB[(SQLite)]
@@ -430,6 +506,7 @@ flowchart LR
     A --> VD
     A --> VE
     A --> VF
+    A --> VG
 
     VA -.implementado por.-> IA
     VB -.implementado por.-> IB
@@ -437,9 +514,11 @@ flowchart LR
     VD -.implementado por.-> ID
     VE -.implementado por.-> IE
     VF -.implementado por.-> IF
+    VG -.implementado por.-> IG
 
     IC --> DB
     IE --> DB
+    IG --> DB
     IB -->|jose · verify| JWKS
 ```
 
@@ -462,4 +541,5 @@ Notas:
 | 4. Logout | US-04 | 38, 42 |
 | 5. Login con Google | US-07, US-08 (AC-02) | 43-47 |
 | 6. Magic link (+ reset 6.1) | US-09, US-10, US-12 | 38, 41, 55, 56 |
+| 6.2 Código OTP | US-13, US-14 | 35, 38, 41, 47, 57 |
 | 7. Capas y puertos | (transversal) | 25-28, 6.1 |
