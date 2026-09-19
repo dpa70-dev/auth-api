@@ -15,5 +15,7 @@ export const API_PATHS = {
   passwordReset: '/auth/password/reset',
   otpRequest: '/auth/otp/request',
   otpVerify: '/auth/otp/verify',
+  guest: '/auth/guest',
+  guestUpgrade: '/auth/guest/upgrade',
   me: '/auth/me',
 } as const;

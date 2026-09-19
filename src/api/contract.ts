@@ -312,6 +312,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/guest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Crear sesión de invitado (cuenta anónima temporal)
+         * @description Crea una cuenta **guest** anónima (US-15): un usuario sin email ni contraseña, con
+         *     `kind = 'guest'`, y emite el par de tokens sobre ella (sesión `provider = 'guest'`).
+         *     Cada llamada crea una cuenta nueva (sin deduplicación): el cliente (app móvil) crea
+         *     cuantos guests necesite durante la exploración anónima. La cuenta guest tiene las
+         *     mismas capacidades de sesión que cualquier otra (access + refresh rotable: `/auth/me`,
+         *     `/auth/refresh`, `/auth/logout`), pero **sin identidad** (`user.email = null`). La
+         *     cuenta puede reclamar email + contraseña después en `POST /auth/guest/upgrade`
+         *     (US-16) y pasa a `kind = 'registered'` conservando su sesión (`requireAuth`).
+         *     No requiere body ni bearer (sin rate limit de credenciales: solo `authLimiter` global).
+         */
+        post: operations["createGuestSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/guest/upgrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclamar identidad de la cuenta invitado (email + contraseña)
+         * @description Convierte una cuenta guest en cuenta registrada (US-16): asigna el email y la contraseña
+         *     reclamados (`kind` pasa a `'registered'`) y **conserva la sesión** (NO revoca tokens — el
+         *     upgrade es sobre la misma cuenta, decisión planificada). Requiere bearer del guest (401 si
+         *     no autenticado). Contraseña validada con el mismo pipeline que US-01: fuerza NIST 800-63B
+         *     (longitud) + checker de comprometidas (PASSWORD_COMPROMISED). **409** `EMAIL_ALREADY_EXISTS`
+         *     si el email ya pertenece a otra cuenta; **409** `GUEST_UPGRADE_INVALID` si el token no es de
+         *     una cuenta guest (p. ej. local/Google). Tras el upgrade, `/auth/me` y las respuestas de
+         *     sesión exponen `user.email` y `user.kind = 'registered'`; `email_verified` queda false
+         *     (el email aún no ha probado posesión — se verifica con los flujos US-09/10 o US-13/14).
+         */
+        post: operations["upgradeGuestAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -337,6 +393,15 @@ export interface components {
         };
         PasswordResetRequest: {
             token: components["schemas"]["MagicLinkToken"];
+            password: components["schemas"]["Password"];
+        };
+        /**
+         * @description Reclamo de identidad de una cuenta guest (US-16): el email pasa a `users.email` y la
+         *     contraseña se hashea con argon2id. El hueco UX de "email_verified queda false" es
+         *     intencional (doc 04 → users.email_verified): el correo no ha probado posesión aún.
+         */
+        UpgradeGuestRequest: {
+            email: components["schemas"]["Email"];
             password: components["schemas"]["Password"];
         };
         /** @description Refresh token opcional — la cookie `refresh_token` (web) tiene prioridad si está presente (docs/06 §3.3). */
@@ -427,7 +492,13 @@ export interface components {
              * @example 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
              */
             id: string;
-            email: components["schemas"]["Email"];
+            /**
+             * @description Email del usuario, **null para cuentas guest** (US-15/16): una cuenta anónima temporal
+             *     aún no tiene identidad. Las cuentas registradas (local, Google, magic link, OTP) siempre
+             *     lo devuelven. Normalizado a minúsculas (Value Object del dominio).
+             */
+            email: components["schemas"]["Email"] | null;
+            kind: components["schemas"]["UserKind"];
             /**
              * Format: date-time
              * @description Fecha de alta del usuario.
@@ -435,6 +506,15 @@ export interface components {
              */
             createdAt: string;
         };
+        /**
+         * @description Discriminador de TIPO DE CUENTA (eje identidad, NO rol ni estado — doc 04 → users.kind):
+         *     responde a "¿qué relación tiene esta cuenta con una identidad real?". `registered` = ligada
+         *     a una identidad real (email con password, Google, magic link u OTP); `guest` = anónima
+         *     temporal sin identidad (`POST /auth/guest`), upgradable a registered (`POST /auth/guest/upgrade`).
+         * @example registered
+         * @enum {string}
+         */
+        UserKind: "registered" | "guest";
         AuthResponse: {
             data: {
                 accessToken: components["schemas"]["AccessToken"];
@@ -469,14 +549,15 @@ export interface components {
                  * @description Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                  *     documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
                  *     ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID, OTP_INVALID (código
-                 *     OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD y
+                 *     OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD,
+                 *     GUEST_UPGRADE_INVALID (el token no pertenece a una cuenta guest — 409) y
                  *     RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
                  *     filtraciones conocidas (NIST 800-63B §5.1.1.2); UNAUTHORIZED y MALFORMED_REQUEST
                  *     completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405
                  *     centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "OTP_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "OTP_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "GUEST_UPGRADE_INVALID" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */
@@ -976,6 +1057,74 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             /** @description Token inexistente, vencido, ya usado o de otro propósito — forma idéntica (anti-enumeración). */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createGuestSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión de invitado creada; mismo contrato que /login. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    upgradeGuestAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpgradeGuestRequest"];
+            };
+        };
+        responses: {
+            /** @description Cuenta actualizada a registrada; mismo contrato que UserResponse. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No autenticado (token ausente/vencido/malformado/firma no verificada, `UNAUTHORIZED`). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description El email ya está en uso o la cuenta no es guest. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -688,6 +688,124 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /auth/guest:
+    post:
+      tags: [Auth]
+      operationId: createGuestSession
+      summary: Crear sesión de invitado (cuenta anónima temporal)
+      description: |
+        Crea una cuenta **guest** anónima (US-15): un usuario sin email ni contraseña, con
+        `kind = 'guest'`, y emite el par de tokens sobre ella (sesión `provider = 'guest'`).
+        Cada llamada crea una cuenta nueva (sin deduplicación): el cliente (app móvil) crea
+        cuantos guests necesite durante la exploración anónima. La cuenta guest tiene las
+        mismas capacidades de sesión que cualquier otra (access + refresh rotable: `/auth/me`,
+        `/auth/refresh`, `/auth/logout`), pero **sin identidad** (`user.email = null`). La
+        cuenta puede reclamar email + contraseña después en `POST /auth/guest/upgrade`
+        (US-16) y pasa a `kind = 'registered'` conservando su sesión (`requireAuth`).
+        No requiere body ni bearer (sin rate limit de credenciales: solo `authLimiter` global).
+      responses:
+        '200':
+          description: Sesión de invitado creada; mismo contrato que /login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                ok:
+                  summary: Cuenta anónima creada (US-15 AC-01/AC-02)
+                  value:
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjBjN2EyZS00YjZkLTRjOGEtOWYyZS0zYTFiMmMzZDRlNWYiLCJpc3MiOiJhcGktc2lnbnVwLWxvZ2luIiwiYXVkIjoiYXBpLWNsaWVudCIsImlhdCI6MTc4Nzg2OTA3MCwiZXhwIjoxNzg3ODcwNDcwLCJuYmYiOjE3ODc4NjkwNzAsImp0aSI6ImEwMWI1Y2NjIn0.ejemplo_firma
+                      refreshToken: v4.local.ejemplo-opaco-solo-server
+                      user:
+                        id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                        email: null
+                        kind: guest
+                        createdAt: '2026-08-27T10:15:30.000Z'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/guest/upgrade:
+    post:
+      tags: [Auth]
+      operationId: upgradeGuestAccount
+      summary: Reclamar identidad de la cuenta invitado (email + contraseña)
+      description: |
+        Convierte una cuenta guest en cuenta registrada (US-16): asigna el email y la contraseña
+        reclamados (`kind` pasa a `'registered'`) y **conserva la sesión** (NO revoca tokens — el
+        upgrade es sobre la misma cuenta, decisión planificada). Requiere bearer del guest (401 si
+        no autenticado). Contraseña validada con el mismo pipeline que US-01: fuerza NIST 800-63B
+        (longitud) + checker de comprometidas (PASSWORD_COMPROMISED). **409** `EMAIL_ALREADY_EXISTS`
+        si el email ya pertenece a otra cuenta; **409** `GUEST_UPGRADE_INVALID` si el token no es de
+        una cuenta guest (p. ej. local/Google). Tras el upgrade, `/auth/me` y las respuestas de
+        sesión exponen `user.email` y `user.kind = 'registered'`; `email_verified` queda false
+        (el email aún no ha probado posesión — se verifica con los flujos US-09/10 o US-13/14).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpgradeGuestRequest'
+            examples:
+              valido:
+                summary: Reclamo de identidad correcto (US-16 AC-01)
+                value:
+                  email: ana@example.com
+                  password: contraseñaSegura123
+      responses:
+        '200':
+          description: Cuenta actualizada a registrada; mismo contrato que UserResponse.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              examples:
+                ok:
+                  summary: Guest upgradeado (US-16 AC-01/AC-02)
+                  value:
+                    data:
+                      id: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+                      email: ana@example.com
+                      kind: registered
+                      createdAt: '2026-08-27T10:15:30.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: No autenticado (token ausente/vencido/malformado/firma no verificada, `UNAUTHORIZED`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: El email ya está en uso o la cuenta no es guest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                email-existente:
+                  summary: Email ya registrado en otra cuenta (US-16 AC-03)
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_EXISTS
+                      message: El email ya está registrado.
+                      requestId: req_01J4X8K2Z3
+                no-guest:
+                  summary: El token no pertenece a una cuenta guest (US-16 AC-04)
+                  value:
+                    error:
+                      code: GUEST_UPGRADE_INVALID
+                      message: La cuenta no es de tipo invitado.
+                      requestId: req_01J4X8K2Z4
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -752,6 +870,19 @@ components:
       properties:
         token:
           $ref: '#/components/schemas/MagicLinkToken'
+        password:
+          $ref: '#/components/schemas/Password'
+    UpgradeGuestRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      description: |
+        Reclamo de identidad de una cuenta guest (US-16): el email pasa a `users.email` y la
+        contraseña se hashea con argon2id. El hueco UX de "email_verified queda false" es
+        intencional (doc 04 → users.email_verified): el correo no ha probado posesión aún.
+      properties:
+        email:
+          $ref: '#/components/schemas/Email'
         password:
           $ref: '#/components/schemas/Password'
     RefreshRequest:
@@ -870,7 +1001,7 @@ components:
       example: v4.local.ejemplo-opaco-solo-server
     UserPublic:
       type: object
-      required: [id, email, createdAt]
+      required: [id, email, kind, createdAt]
       additionalProperties: false
       properties:
         id:
@@ -879,12 +1010,29 @@ components:
           description: UUID v4 de users.id (nunca una clave autoincremental).
           example: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
         email:
-          $ref: '#/components/schemas/Email'
+          nullable: true
+          description: |
+            Email del usuario, **null para cuentas guest** (US-15/16): una cuenta anónima temporal
+            aún no tiene identidad. Las cuentas registradas (local, Google, magic link, OTP) siempre
+            lo devuelven. Normalizado a minúsculas (Value Object del dominio).
+          allOf:
+            - $ref: '#/components/schemas/Email'
+        kind:
+          $ref: '#/components/schemas/UserKind'
         createdAt:
           type: string
           format: date-time
           description: Fecha de alta del usuario.
           example: '2026-08-27T10:15:30.000Z'
+    UserKind:
+      type: string
+      enum: [registered, guest]
+      description: |
+        Discriminador de TIPO DE CUENTA (eje identidad, NO rol ni estado — doc 04 → users.kind):
+        responde a "¿qué relación tiene esta cuenta con una identidad real?". `registered` = ligada
+        a una identidad real (email con password, Google, magic link u OTP); `guest` = anónima
+        temporal sin identidad (`POST /auth/guest`), upgradable a registered (`POST /auth/guest/upgrade`).
+      example: registered
     AuthResponse:
       type: object
       required: [data]
@@ -951,7 +1099,8 @@ components:
                 Identificador estable y programable. Complemento del catálogo de US-06: los códigos
                 documentados son VALIDATION_ERROR, INVALID_CREDENTIALS, EMAIL_ALREADY_EXISTS,
                 ACCOUNT_EXISTS_WITH_GOOGLE, EMAIL_NOT_VERIFIED, MAGIC_LINK_INVALID, OTP_INVALID (código
-                OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD y
+                OTP inexistente, expirado o consumido — 401 idéntico), ACCOUNT_HAS_NO_PASSWORD,
+                GUEST_UPGRADE_INVALID (el token no pertenece a una cuenta guest — 409) y
                 RATE_LIMITED; PASSWORD_COMPROMISED rechaza contraseñas de
                 filtraciones conocidas (NIST 800-63B §5.1.1.2); UNAUTHORIZED y MALFORMED_REQUEST
                 completan la matriz 401/400; NOT_FOUND y METHOD_NOT_ALLOWED cubren el 404/405
@@ -965,6 +1114,7 @@ components:
                 - MAGIC_LINK_INVALID
                 - OTP_INVALID
                 - ACCOUNT_HAS_NO_PASSWORD
+                - GUEST_UPGRADE_INVALID
                 - RATE_LIMITED
                 - PASSWORD_COMPROMISED
                 - UNAUTHORIZED

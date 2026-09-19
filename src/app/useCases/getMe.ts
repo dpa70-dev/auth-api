@@ -11,7 +11,8 @@ export type GetMeCommand = {
 
 export type GetMeResult = {
   id: UserId;
-  email: Email;
+  email: Email | null;
+  kind: 'registered' | 'guest';
   createdAt: string;
 };
 
@@ -26,6 +27,6 @@ export class GetMe implements UseCase<GetMeCommand, GetMeResult> {
     const user = await this.users.findById(cmd.userId);
     if (!user) throw new ApiError(ErrorCodes.UNAUTHORIZED);
     this.logger.info(LOG_EVENTS.USER_PROFILE_FETCHED, { userId: user.id });
-    return { id: user.id, email: user.email, createdAt: user.createdAt };
+    return { id: user.id, email: user.email, kind: user.kind, createdAt: user.createdAt };
   }
 }

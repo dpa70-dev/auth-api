@@ -1,7 +1,7 @@
 /** Proveedor de identidad de una sesión (doc 04 → refresh_tokens.provider). */
 import { z } from 'zod';
 
-export const providerValues = ['local', 'google', 'magic', 'otp'] as const;
+export const providerValues = ['local', 'google', 'magic', 'otp', 'guest'] as const;
 
 export const providerSchema = z.enum(providerValues);
 

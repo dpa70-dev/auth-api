@@ -30,6 +30,8 @@ export const LOG_EVENTS = {
   PASSWORD_COMPROMISED_REJECTED: 'password_compromised_rejected',
   PASSWORD_BREACH_CHECK_FAILED: 'password_breach_check_failed',
   PASSWORD_BREACH_CHECK_FALLBACK: 'password_breach_check_fallback',
+  GUEST_SESSION_CREATED: 'guest_session_created',
+  GUEST_UPGRADED: 'guest_upgraded',
 } as const;
 
 /** Unión de eventos válidos: el puerto solo admite estos — compilar = no hay typos. */

@@ -21,3 +21,4 @@ export * from './provider.js';
 export * from './refreshTokenStatus.js';
 export * from './timestamp.js';
 export * from './userId.js';
+export * from './userKind.js';

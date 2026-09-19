@@ -24,6 +24,8 @@ import {
   ResetPassword,
   RequestOtp,
   VerifyOtp,
+  CreateGuestSession,
+  UpgradeGuestAccount,
 } from './useCases/index.js';
 
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
@@ -54,6 +56,8 @@ export type UseCases = {
   me: GetMe;
   changePassword: ChangePassword;
   resetPassword: ResetPassword;
+  createGuestSession: CreateGuestSession;
+  upgradeGuestAccount: UpgradeGuestAccount;
   /** null ⇔ GOOGLE_CLIENT_ID no configurado: la ruta existe pero responde 500 explícito. */
   loginGoogle: LoginGoogle | null;
 };
@@ -78,5 +82,7 @@ export const buildUseCases = (
   me: new GetMe(users, logger),
   changePassword: new ChangePassword(users, hasher, compromised, logger),
   resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, unitOfWork, logger),
+  createGuestSession: new CreateGuestSession(users, tokens, unitOfWork, logger),
+  upgradeGuestAccount: new UpgradeGuestAccount(users, hasher, compromised, unitOfWork, logger),
   loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger),
 });

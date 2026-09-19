@@ -11,7 +11,7 @@ import type {
   UserRecord,
   UserRepository,
 } from '../../domain/port/index.js';
-import { familyIdSchema, providerSchema, userIdSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -26,7 +26,7 @@ export type RegisterUserCommand = {
 export type RegisterUserResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email; createdAt: string };
+  user: { id: UserId; email: Email; kind: 'registered'; createdAt: string };
 };
 
 export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserResult> {
@@ -76,6 +76,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
           passwordHash,
           googleSub: null,
           emailVerified: false,
+          kind: userKindSchema.enum.registered,
           createdAt: now.toISOString(),
         });
       } catch (err) {
@@ -89,7 +90,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     return {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      user: { id, email: cmd.email, createdAt: now.toISOString() },
+      user: { id, email: cmd.email, kind: userKindSchema.enum.registered, createdAt: now.toISOString() },
     };
   }
 }

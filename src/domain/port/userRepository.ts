@@ -12,7 +12,7 @@
  * sin tocar ni la entidad ni los use cases: solo desacoplar el puerto y el constructor inyectado.
  */
 import type { Email, FamilyId, GoogleSub, Jti, PasswordHash, Provider, RefreshTokenStatus, Timestamp, UserId } from '../vo/index.js';
-import type { User } from '../entity/user.js';
+import type { NewUser, User } from '../entity/user.js';
 
 export type InsertRefreshToken = {
   jti: Jti;
@@ -43,15 +43,8 @@ export interface UserRepository {
     status: RefreshTokenStatus;
     expiresAt: Timestamp;
   } | null>;
-  /** Inserta usuario; lanza Error si viola la unicidad de email o google_sub. */
-  createUser(input: {
-    id: UserId;
-    email: Email;
-    passwordHash: PasswordHash | null;
-    googleSub: GoogleSub | null;
-    emailVerified: boolean;
-    createdAt: Timestamp;
-  }): Promise<void>;
+  /** Inserta usuario (NewUser con email nullable y kind: registrado o guest US-15); lanza Error si viola la unicidad de email o google_sub. */
+  createUser(input: NewUser & { createdAt: Timestamp }): Promise<void>;
   insertRefreshToken(token: InsertRefreshToken): Promise<void>;
   /** SET status = 'used' (rotación, doc 02 → diagrama 3). */
   markRefreshTokenUsed(tokenHash: string): Promise<void>;
@@ -65,4 +58,11 @@ export interface UserRepository {
   markEmailVerified(email: Email): Promise<void>;
   /** SET password_hash = nuevo (cambio de contraseña: US-11 change-password y US-12 reset vía magic link). */
   updatePasswordHash(userId: UserId, passwordHash: PasswordHash): Promise<void>;
+  /**
+   * US-16: reclama identidad en una cuenta guest → SET email + password_hash + kind='registered'
+   * (email_verified queda false → se verifica después vía magic link). **No revoca sesiones**
+   * (decisión aprobada: el guest conserva acceso; el upgrade es sobre la misma cuenta).
+   * Lanza Error si el email viola la unicidad de users.email (otra cuenta ya lo usa).
+   */
+  upgradeGuestToRegistered(userId: UserId, email: Email, passwordHash: PasswordHash): Promise<void>;
 }
