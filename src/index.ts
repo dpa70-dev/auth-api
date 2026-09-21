@@ -8,7 +8,7 @@ import { API_PREFIX, config } from './config.js';
 import { LOG_EVENTS } from './domain/port/index.js';
 import { composeInfra, type ComposeOverrides } from './infra/compose.js';
 import { buildUseCases } from './app/buildUseCases.js';
-import { PinoLogger, requestContext } from './infra/pinoLogger.js';
+import { PinoLogger, requestContext } from './infra/outbound/pinoLogger.js';
 
 import { apiRouter } from './api/routes.js';
 import { httpLoggerConfig, requestIdMiddleware } from './api/middlewares/middleware.js';

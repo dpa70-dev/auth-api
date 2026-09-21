@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
-import type { PasswordHasher } from '../domain/port/index.js';
-import type { PasswordHash, PlainPassword } from '../domain/vo/index.js';
+import type { PasswordHasher } from '../../domain/port/index.js';
+import type { PasswordHash, PlainPassword } from '../../domain/vo/index.js';
 
 /**
  * parÁmetros OWASP min-interactive para argon2id (doc 00 → ítem 43):

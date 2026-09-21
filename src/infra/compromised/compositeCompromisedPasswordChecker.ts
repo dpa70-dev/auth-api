@@ -1,6 +1,6 @@
-import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import type { PlainPassword } from '../domain/vo/index.js';
+import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import type { PlainPassword } from '../../domain/vo/index.js';
 
 /**
  * Failover online→local (NIST 800-63B §5.1.1.2). El no-verificable del primario dispara el

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { HibpCompromisedPasswordChecker } from '../src/infra/hibpCompromisedPasswordChecker.js';
+import { HibpCompromisedPasswordChecker } from '../src/infra/compromised/hibpCompromisedPasswordChecker.js';
 import { LOG_EVENTS } from '../src/domain/port/index.js';
 import type { Logger } from '../src/domain/port/index.js';
 import type { PlainPassword } from '../src/domain/vo/index.js';

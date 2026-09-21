@@ -1,9 +1,9 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { and, eq, gt, sql } from 'drizzle-orm';
-import type { OtpRecord, OtpRepository } from '../domain/port/index.js';
-import { otpCodes } from '../db/schema.js';
-import type { Email, OtpStatus, PasswordHash, Timestamp } from '../domain/vo/index.js';
-import { otpStatusSchema } from '../domain/vo/index.js';
+import type { OtpRecord, OtpRepository } from '../../domain/port/index.js';
+import { otpCodes } from '../../db/schema.js';
+import type { Email, OtpStatus, PasswordHash, Timestamp } from '../../domain/vo/index.js';
+import { otpStatusSchema } from '../../domain/vo/index.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 

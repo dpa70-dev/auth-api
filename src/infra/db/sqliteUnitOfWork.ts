@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3';
-import type { UnitOfWork } from '../domain/port/index.js';
+import type { UnitOfWork } from '../../domain/port/index.js';
 
 /**
  * Unit of Work sobre la conexión SQLite (doc 13 → §13.1).

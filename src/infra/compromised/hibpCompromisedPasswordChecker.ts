@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import type { PlainPassword } from '../domain/vo/index.js';
+import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import type { PlainPassword } from '../../domain/vo/index.js';
 
 const HIBP_RANGE_URL = 'https://api.pwnedpasswords.com/range/';
 

@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import type { GoogleClaims, GoogleIdTokenVerifier } from '../domain/port/index.js';
-import { emailSchema, googleSubSchema } from '../domain/vo/index.js';
+import type { GoogleClaims, GoogleIdTokenVerifier } from '../../domain/port/index.js';
+import { emailSchema, googleSubSchema } from '../../domain/vo/index.js';
 
 /**
  * US-07 AC-03: verificación estrictamente server-side del ID token de Google.

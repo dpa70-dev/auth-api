@@ -1,6 +1,6 @@
-import type { EmailSender, Logger } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import type { Email } from '../domain/vo/index.js';
+import type { EmailSender, Logger } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import type { Email } from '../../domain/vo/index.js';
 
 /**
  * Implementación de dev/test del puerto EmailSender: en lugar de un transporte SMTP real

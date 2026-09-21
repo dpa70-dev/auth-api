@@ -4,18 +4,18 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
 import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, OtpRepository, UnitOfWork } from '../domain/port/index.js';
-import { Argon2PasswordHasher } from './argon2PasswordHasher.js';
-import { CompositeCompromisedPasswordChecker } from './compositeCompromisedPasswordChecker.js';
-import { HibpCompromisedPasswordChecker } from './hibpCompromisedPasswordChecker.js';
-import { LocalCompromisedPasswordChecker } from './localCompromisedPasswordChecker.js';
-import { JoseTokenService } from './joseTokenService.js';
-import { DrizzleUserRepository } from './drizzleUserRepository.js';
-import { DrizzleMagicLinkRepository } from './drizzleMagicLinkRepository.js';
-import { DrizzleOtpRepository } from './drizzleOtpRepository.js';
-import { ConsoleEmailSender } from './consoleEmailSender.js';
-import { GoogleIdTokenVerifierJose } from './googleJwtVerifier.js';
-import { PinoLogger } from './pinoLogger.js';
-import { SqliteUnitOfWork } from './sqliteUnitOfWork.js';
+import { Argon2PasswordHasher } from './hashing/argon2PasswordHasher.js';
+import { CompositeCompromisedPasswordChecker } from './compromised/compositeCompromisedPasswordChecker.js';
+import { HibpCompromisedPasswordChecker } from './compromised/hibpCompromisedPasswordChecker.js';
+import { LocalCompromisedPasswordChecker } from './compromised/localCompromisedPasswordChecker.js';
+import { JoseTokenService } from './tokens/joseTokenService.js';
+import { DrizzleUserRepository } from './db/drizzleUserRepository.js';
+import { DrizzleMagicLinkRepository } from './db/drizzleMagicLinkRepository.js';
+import { DrizzleOtpRepository } from './db/drizzleOtpRepository.js';
+import { ConsoleEmailSender } from './outbound/consoleEmailSender.js';
+import { GoogleIdTokenVerifierJose } from './tokens/googleJwtVerifier.js';
+import { PinoLogger } from './outbound/pinoLogger.js';
+import { SqliteUnitOfWork } from './db/sqliteUnitOfWork.js';
 
 import type { PasswordHasher, TokenIssuer, UserRepository } from '../domain/port/index.js';
 

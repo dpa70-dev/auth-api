@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { jwtVerify, SignJWT } from 'jose';
-import type { AccessTokenPayload, TokenIssuer } from '../domain/port/index.js';
-import { jtiSchema, type Jti, type UserId } from '../domain/vo/index.js';
+import type { AccessTokenPayload, TokenIssuer } from '../../domain/port/index.js';
+import { jtiSchema, type Jti, type UserId } from '../../domain/vo/index.js';
 
 export class JoseTokenService implements TokenIssuer {
   constructor(

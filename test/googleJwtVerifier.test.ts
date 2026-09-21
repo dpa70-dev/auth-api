@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { GoogleIdTokenVerifierJose } from '../src/infra/googleJwtVerifier.js';
+import { GoogleIdTokenVerifierJose } from '../src/infra/tokens/googleJwtVerifier.js';
 import type { GoogleClaims } from '../src/domain/port/index.js';
 
 const CLIENT_ID = 'test-client-id.apps.googleusercontent.com';
