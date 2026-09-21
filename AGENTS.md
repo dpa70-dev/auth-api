@@ -111,7 +111,7 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
 | Ports & Adapters | Puertos en `domain/port/`, adaptadores en `infra/`, fakes en `test/` (doc 09) | `app/` y `domain/` dependen solo de interfaces; los adaptadores se inyectan en compose |
 | Strategy | `TokenIssuer`, `PasswordHasher` (doc 13.6) | Proveedor nuevo = **adaptador nuevo**, jamás tocar el dominio |
 | Repository | `UserRepository`, `MagicLinkRepository` | Puertos pequeños y específicos (§2.1 — I) |
-| Unit of Work | `domain/port/unitOfWork.ts` + `infra/sqliteUnitOfWork.ts` (§4) | tx solo alrededor de escrituras |
+| Unit of Work | `domain/port/unitOfWork.ts` + `infra/db/sqliteUnitOfWork.ts` (§4) | tx solo alrededor de escrituras |
 | Value Objects brandeados | `domain/vo/` con Zod (§1) | *parse, don't validate* |
 
 ### Catálogo de candidatos — documentados, NO implementar de motu proprio

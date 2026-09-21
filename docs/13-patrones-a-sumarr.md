@@ -20,7 +20,7 @@ Los patrones de esta guía se estudian en las fuentes de referencia habituales: 
 
 ## 13.1 — Unit of Work: atomicidad en use cases multi-escritura
 
-> **Estado: implementado (14-sep-2026)** — puerto `UnitOfWork` en `src/domain/port/unitOfWork.ts`, adaptador `SqliteUnitOfWork` en `src/infra/sqliteUnitOfWork.ts` y wiring en `compose.ts`/`buildUseCases.ts`. Los UCs transaccionales (`RegisterUser`, `ConsumeMagicLink`, `ResetPassword`) generan el material crypto **fuera** de la tx (`generateSession`/hasher/compromised) y envuelven solo sus escrituras con `unitOfWork.withTransaction`. Test de commit/rollback: `test/unitOfWork.test.ts`.
+> **Estado: implementado (14-sep-2026)** — puerto `UnitOfWork` en `src/domain/port/unitOfWork.ts`, adaptador `SqliteUnitOfWork` en `src/infra/db/sqliteUnitOfWork.ts` y wiring en `compose.ts`/`buildUseCases.ts`. Los UCs transaccionales (`RegisterUser`, `ConsumeMagicLink`, `ResetPassword`) generan el material crypto **fuera** de la tx (`generateSession`/hasher/compromised) y envuelven solo sus escrituras con `unitOfWork.withTransaction`. Test de commit/rollback: `test/unitOfWork.test.ts`.
 
 ### Problema
 
@@ -45,7 +45,7 @@ export interface UnitOfWork {
 }
 ```
 
-**Decisión de implementación (14-sep-2026)**: con better-sqlite3 (driver síncrono, UNA conexión), la transacción es de **alcance de conexión** — `BEGIN` abarca a todos los repos que operan sobre esa conexión, que son los mismos ya inyectados en el use case. Por eso `fn` no recibe repos "transaccionales" (serían las mismas instancias — un no-op): los UCs envuelven sus escrituras con el `unitOfWork` que ya tienen inyectado. `generateSession` (jose, fuera de la tx) entrega el `refreshRow`; el insert del refresh va dentro. Ver `src/domain/port/unitOfWork.ts` y `src/infra/sqliteUnitOfWork.ts`.
+**Decisión de implementación (14-sep-2026)**: con better-sqlite3 (driver síncrono, UNA conexión), la transacción es de **alcance de conexión** — `BEGIN` abarca a todos los repos que operan sobre esa conexión, que son los mismos ya inyectados en el use case. Por eso `fn` no recibe repos "transaccionales" (serían las mismas instancias — un no-op): los UCs envuelven sus escrituras con el `unitOfWork` que ya tienen inyectado. `generateSession` (jose, fuera de la tx) entrega el `refreshRow`; el insert del refresh va dentro. Ver `src/domain/port/unitOfWork.ts` y `src/infra/db/sqliteUnitOfWork.ts`.
 
 ```mermaid
 sequenceDiagram

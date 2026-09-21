@@ -16,10 +16,10 @@ import {
   type PasswordHash,
   type PlainPassword,
 } from '../src/domain/vo/index.js';
-import { DrizzleOtpRepository } from '../src/infra/drizzleOtpRepository.js';
-import { DrizzleUserRepository } from '../src/infra/drizzleUserRepository.js';
-import { JoseTokenService } from '../src/infra/joseTokenService.js';
-import { SqliteUnitOfWork } from '../src/infra/sqliteUnitOfWork.js';
+import { DrizzleOtpRepository } from '../src/infra/db/drizzleOtpRepository.js';
+import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
+import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
+import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
 /** Hasher de test que SÍ verifica: hash determinista >= 20 chars (mínimo de passwordHashSchema). */

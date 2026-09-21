@@ -1,9 +1,9 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { and, eq } from 'drizzle-orm';
-import type { MagicLinkRecord, MagicLinkRepository } from '../domain/port/index.js';
-import { magicLinks } from '../db/schema.js';
-import type { Email, MagicLinkPurpose, MagicLinkStatus, Timestamp } from '../domain/vo/index.js';
-import { magicLinkStatusSchema } from '../domain/vo/index.js';
+import type { MagicLinkRecord, MagicLinkRepository } from '../../domain/port/index.js';
+import { magicLinks } from '../../db/schema.js';
+import type { Email, MagicLinkPurpose, MagicLinkStatus, Timestamp } from '../../domain/vo/index.js';
+import { magicLinkStatusSchema } from '../../domain/vo/index.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 

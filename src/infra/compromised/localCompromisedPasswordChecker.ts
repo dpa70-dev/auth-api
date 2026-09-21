@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../domain/port/index.js';
-import { LOG_EVENTS } from '../domain/port/index.js';
-import type { PlainPassword } from '../domain/vo/index.js';
+import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../../domain/port/index.js';
+import { LOG_EVENTS } from '../../domain/port/index.js';
+import type { PlainPassword } from '../../domain/vo/index.js';
 import { WEAK_PASSWORDS } from './weakPasswords.js';
 
 const sha1Upper = (s: string): string => createHash('sha1').update(s).digest('hex').toUpperCase();

@@ -14,8 +14,8 @@ import {
   type PasswordHash,
   type PlainPassword,
 } from '../src/domain/vo/index.js';
-import { DrizzleOtpRepository } from '../src/infra/drizzleOtpRepository.js';
-import { DrizzleUserRepository } from '../src/infra/drizzleUserRepository.js';
+import { DrizzleOtpRepository } from '../src/infra/db/drizzleOtpRepository.js';
+import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
 /** Hasher de test: hash determinista >= 20 chars (mínimo de passwordHashSchema), mismo patrón que unitOfWork.test.ts. */

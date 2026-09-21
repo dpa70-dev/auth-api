@@ -2,8 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { pino, type LevelWithSilent, type Logger as PinoInstance, type LoggerOptions } from 'pino';
-import type { Logger } from '../domain/port/index.js';
-import { nodeEnvSchema, type NodeEnv } from '../config.js';
+import type { Logger } from '../../domain/port/index.js';
+import { nodeEnvSchema, type NodeEnv } from '../../config.js';
 
 /**
  * Contexto por request (doc 00 → ítem 12): el requestId enriquece cada log de la request.

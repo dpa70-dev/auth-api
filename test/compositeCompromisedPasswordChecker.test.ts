@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CompositeCompromisedPasswordChecker } from '../src/infra/compositeCompromisedPasswordChecker.js';
+import { CompositeCompromisedPasswordChecker } from '../src/infra/compromised/compositeCompromisedPasswordChecker.js';
 import { LOG_EVENTS } from '../src/domain/port/index.js';
 import type { BreachCheckResult, CompromisedPasswordChecker, Logger } from '../src/domain/port/index.js';
 import type { PlainPassword } from '../src/domain/vo/index.js';

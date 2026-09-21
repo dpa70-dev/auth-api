@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { LocalCompromisedPasswordChecker } from '../src/infra/localCompromisedPasswordChecker.js';
+import { LocalCompromisedPasswordChecker } from '../src/infra/compromised/localCompromisedPasswordChecker.js';
 import type { Logger } from '../src/domain/port/index.js';
 import type { PlainPassword } from '../src/domain/vo/index.js';
 

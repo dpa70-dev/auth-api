@@ -6,9 +6,9 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { RegisterUser } from '../src/app/useCases/registerUser.js';
 import type { CompromisedPasswordChecker, Logger, PasswordHasher, TokenIssuer } from '../src/domain/port/index.js';
 import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
-import { DrizzleUserRepository } from '../src/infra/drizzleUserRepository.js';
-import { JoseTokenService } from '../src/infra/joseTokenService.js';
-import { SqliteUnitOfWork } from '../src/infra/sqliteUnitOfWork.js';
+import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
+import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
+import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
 /** Screen falso: ninguna contraseña está comprometida (los tests no pueden depender de la red). */

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import type { Server } from 'node:http';
 import { buildApp } from '../src/index.js';
-import { CompositeCompromisedPasswordChecker } from '../src/infra/compositeCompromisedPasswordChecker.js';
-import { HibpCompromisedPasswordChecker } from '../src/infra/hibpCompromisedPasswordChecker.js';
-import { LocalCompromisedPasswordChecker } from '../src/infra/localCompromisedPasswordChecker.js';
+import { CompositeCompromisedPasswordChecker } from '../src/infra/compromised/compositeCompromisedPasswordChecker.js';
+import { HibpCompromisedPasswordChecker } from '../src/infra/compromised/hibpCompromisedPasswordChecker.js';
+import { LocalCompromisedPasswordChecker } from '../src/infra/compromised/localCompromisedPasswordChecker.js';
 import type { CompromisedPasswordChecker, EmailSender, Logger } from '../src/domain/port/index.js';
 import type { Email } from '../src/domain/vo/index.js';
 
