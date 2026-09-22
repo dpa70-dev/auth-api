@@ -43,6 +43,13 @@
       "when": 1789840612088,
       "tag": "0005_vengeful_peter_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790088047833,
+      "tag": "0006_fair_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

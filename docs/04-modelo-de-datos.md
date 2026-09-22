@@ -69,8 +69,10 @@ CREATE TABLE users (
   email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1)),
   kind           TEXT NOT NULL DEFAULT 'registered' CHECK (kind IN ('registered','guest')), -- tipo de cuenta: identidad vs anónima (VOs: UserKind)
   created_at     TEXT NOT NULL,                                   -- ISO 8601 UTC
-  -- al menos una identidad (local/Google), email ya verificado vía magic link/OTP, o cuenta guest:
-  CHECK (password_hash IS NOT NULL OR google_sub IS NOT NULL OR email_verified = 1 OR kind = 'guest')
+  -- espejo del refine de newUserSchema (dominio = fuente de verdad): guest sin identidad es la
+  -- única excepción; cualquier otro kind exige email + al menos una identidad (local/Google,
+  -- o email ya verificado vía magic link/OTP):
+  CHECK (kind = 'guest' OR (email IS NOT NULL AND (password_hash IS NOT NULL OR google_sub IS NOT NULL OR email_verified = 1)))
 ) STRICT;
 
 -- refresh_tokens: sesiones de refresco (rotación + reuso + logout)
