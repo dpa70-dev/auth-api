@@ -12,6 +12,7 @@ import type {
   UserRepository,
 } from '../../domain/port/index.js';
 import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
+import { validateNewUser } from '../../domain/entity/user.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -71,12 +72,14 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     await this.unitOfWork.withTransaction(async () => {
       try {
         await this.users.createUser({
-          id,
-          email: cmd.email,
-          passwordHash,
-          googleSub: null,
-          emailVerified: false,
-          kind: userKindSchema.enum.registered,
+          ...validateNewUser({
+            id,
+            email: cmd.email,
+            passwordHash,
+            googleSub: null,
+            emailVerified: false,
+            kind: userKindSchema.enum.registered,
+          }),
           createdAt: now.toISOString(),
         });
       } catch (err) {

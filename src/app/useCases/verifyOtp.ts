@@ -4,6 +4,7 @@ import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, OtpRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
+import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -83,12 +84,14 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
       } else {
         // Auto-cuenta (US-14): el código verificado prueba la posesión del email → emailVerified=true.
         await this.users.createUser({
-          id: userId,
-          email: cmd.email,
-          passwordHash: null,
-          googleSub: null,
-          emailVerified: true,
-          kind: userKindSchema.enum.registered,
+          ...validateNewUser({
+            id: userId,
+            email: cmd.email,
+            passwordHash: null,
+            googleSub: null,
+            emailVerified: true,
+            kind: userKindSchema.enum.registered,
+          }),
           createdAt: now.toISOString(),
         });
         this.logger.info(LOG_EVENTS.USER_REGISTERED_VIA_OTP, { userId });
