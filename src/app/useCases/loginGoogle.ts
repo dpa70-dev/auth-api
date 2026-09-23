@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
-import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId, type UserKind } from '../../domain/vo/index.js';
+import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
@@ -20,7 +20,7 @@ export type LoginGoogleCommand = {
 export type LoginGoogleResult = {
   accessToken: string;
   refreshToken: string;
-  user: { id: UserId; email: Email | null; kind: UserKind; createdAt: string };
+  user: { id: UserId; email: Email | null; kind: 'registered'; createdAt: string };
 };
 
 export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResult> {
@@ -43,7 +43,17 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
 
     const known = await this.users.findByGoogleSub(claims.sub);
     if (known) {
-      return this.withSession(known, providerSchema.enum.google, now, cmd.refreshTtlDays);
+      // Invariante US-15/US-16: el guest nace con google_sub null y el upgrade jamás se lo asigna;
+      // toda fila hallada por googleSub es registered. Guard explícito (el tipo UserRecord no lo codifica).
+      if (known.kind !== userKindSchema.enum.registered) {
+        throw new ApiError(ErrorCodes.UNAUTHORIZED);
+      }
+      return this.withSession(
+        { id: known.id, email: known.email, kind: known.kind, createdAt: known.createdAt },
+        providerSchema.enum.google,
+        now,
+        cmd.refreshTtlDays,
+      );
     }
 
     // Primer inicio: alta implícita (US-07 AC-02, diagrama 5) — solo si el email está libre.
@@ -86,7 +96,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
   }
 
   private async withSession(
-    user: { id: UserId; email: Email | null; kind: UserKind; createdAt: string },
+    user: { id: UserId; email: Email | null; kind: 'registered'; createdAt: string },
     provider: Provider,
     now: Date,
     refreshTtlDays: number,
