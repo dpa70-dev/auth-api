@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Logger, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -45,12 +46,14 @@ export class CreateGuestSession implements UseCase<CreateGuestSessionCommand, Cr
     // Escrituras atómicas (doc 13 → §13.1): guest + refresh token se crean juntos o no se crea ninguno.
     await this.unitOfWork.withTransaction(async () => {
       await this.users.createUser({
-        id,
-        email: null,
-        passwordHash: null,
-        googleSub: null,
-        emailVerified: false,
-        kind: userKindSchema.enum.guest,
+        ...validateNewUser({
+          id,
+          email: null,
+          passwordHash: null,
+          googleSub: null,
+          emailVerified: false,
+          kind: userKindSchema.enum.guest,
+        }),
         createdAt: now.toISOString(),
       });
       await this.users.insertRefreshToken(session.refreshRow);

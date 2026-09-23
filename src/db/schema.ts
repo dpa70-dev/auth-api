@@ -51,12 +51,14 @@ export const users = sqliteTable(
   (t) => [
     uniqueIndex('users_email_unique').on(t.email),
     uniqueIndex('users_google_sub_unique').on(t.googleSub),
-    // doc 04 → users: CHECK (password_hash IS NOT NULL OR google_sub IS NOT NULL OR email_verified = 1 OR kind = 'guest')
+    // doc 04 → users: CHECK espejo del refine de newUserSchema (el dominio es la fuente de verdad):
+    // kind='guest' puede existir sin identidad (US-15, única excepción); cualquier otro kind exige
+    // email + al menos una identidad (password_hash, google_sub o email_verified=1).
     // Un usuario creado por magic link/OTP prueba posesión del email (email_verified=1) sin
-    // password_hash ni google_sub; un guest (US-15) existe sin identidad — la única excepción.
+    // password_hash ni google_sub.
     check(
       'users_identity_check',
-      sql`${t.passwordHash} IS NOT NULL OR ${t.googleSub} IS NOT NULL OR ${t.emailVerified} = 1 OR ${t.kind} = 'guest'`,
+      sql`${t.kind} = 'guest' OR (${t.email} IS NOT NULL AND (${t.passwordHash} IS NOT NULL OR ${t.googleSub} IS NOT NULL OR ${t.emailVerified} = 1))`,
     ),
     // doc 04 → users.kind: CHECK derivado de userKindValues (fuente única)
     check('users_kind_check', sql`${t.kind} IN (${inList(userKindValues)})`),

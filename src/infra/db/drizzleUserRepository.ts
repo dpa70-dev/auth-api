@@ -7,20 +7,15 @@ import type {
 } from '../../domain/port/index.js';
 import { refreshTokens, users } from '../../db/schema.js';
 import { refreshTokenStatusSchema, userKindSchema, type Email, type FamilyId, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../../domain/vo/index.js';
-import type { NewUser } from '../../domain/entity/user.js';
+import { userSchema, type NewUser } from '../../domain/entity/user.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 
 const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 
-const mapUserRow = (row: typeof users.$inferSelect): UserRecord => ({
-  id: row.id as UserId,
-  email: row.email as Email | null,
-  passwordHash: row.passwordHash as PasswordHash | null,
-  googleSub: row.googleSub as GoogleSub | null,
-  emailVerified: row.emailVerified,
-  kind: row.kind,
-  createdAt: toIso(row.createdAt),
-});
+const mapUserRow = (row: typeof users.$inferSelect): UserRecord =>
+  // userSchema valida la invariante de la entidad al entrar (email obligatorio para non-guest,
+  // kind ∈ {registered, guest}) — filas corruptas no llegan al dominio.
+  userSchema.parse(row);
 
 const mapRefreshRow = (
   row: typeof refreshTokens.$inferSelect,
