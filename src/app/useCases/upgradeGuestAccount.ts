@@ -9,7 +9,7 @@ import type {
   UserRepository,
 } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { userKindSchema, type Email, type PlainPassword, type Timestamp, type UserId, type UserKind } from '../../domain/vo/index.js';
+import { userKindSchema, type Email, type PlainPassword, type Timestamp, type UserId } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
 export type UpgradeGuestAccountCommand = {
@@ -21,7 +21,7 @@ export type UpgradeGuestAccountCommand = {
 export type UpgradeGuestAccountResult = {
   id: UserId;
   email: Email;
-  kind: UserKind;
+  kind: 'registered';
   createdAt: Timestamp;
 };
 
