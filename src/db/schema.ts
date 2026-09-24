@@ -19,6 +19,7 @@ import {
   refreshTokenStatusValues,
   userKindValues,
   userRoleValues,
+  userStatusValues,
 } from '../domain/vo/index.js';
 
 /**
@@ -50,6 +51,9 @@ export const users = sqliteTable(
     // role: rol de autorización (doc 04 → users.role), eje independiente de kind. DEFAULT 'user'
     // retrocompatible: toda fila preexistente queda user; solo un admin promueve.
     role: text('role', { enum: userRoleValues }).notNull().default('user'),
+    // status: eje de moderación (doc 04 → users.status), independiente de kind y role. DEFAULT
+    // 'active' retrocompatible: toda fila preexistente queda active; solo un admin modera.
+    status: text('status', { enum: userStatusValues }).notNull().default('active'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [
@@ -68,6 +72,8 @@ export const users = sqliteTable(
     check('users_kind_check', sql`${t.kind} IN (${inList(userKindValues)})`),
     // doc 04 → users.role: CHECK derivado de userRoleValues (fuente única)
     check('users_role_check', sql`${t.role} IN (${inList(userRoleValues)})`),
+    // doc 04 → users.status: CHECK derivado de userStatusValues (fuente única)
+    check('users_status_check', sql`${t.status} IN (${inList(userStatusValues)})`),
   ],
 );
 

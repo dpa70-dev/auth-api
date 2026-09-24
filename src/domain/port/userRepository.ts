@@ -13,6 +13,7 @@
  */
 import type { Email, GoogleSub, PasswordHash, Timestamp, UserId } from '../vo/index.js';
 import type { UserRole } from '../vo/index.js';
+import type { UserStatus } from '../vo/index.js';
 import type { NewUser, User } from '../entity/user.js';
 
 /**
@@ -44,4 +45,9 @@ export interface UserRepository {
    * (verifica actor admin y prohíbe auto-rol); el repo no sabe de políticas.
    */
   setRole(userId: UserId, role: UserRole): Promise<void>;
+  /**
+   * Eje de moderación (doc 04 → users.status): SET status del usuario. Solo el use case
+   * SetUserModerationStatus lo llama (verifica actor admin); el repo no sabe de políticas.
+   */
+  setModerationStatus(userId: UserId, status: UserStatus): Promise<void>;
 }

@@ -23,3 +23,4 @@ export * from './timestamp.js';
 export * from './userId.js';
 export * from './userKind.js';
 export * from './userRole.js';
+export * from './userStatus.js';
