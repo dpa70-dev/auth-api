@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, MagicLinkRepository, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -56,6 +56,10 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
 
     // Estado actual fuera de la tx; las escrituras que dependen de él se ejecutan de forma atómica.
     const user = await this.users.findByEmail(found.email);
+    // doc 04 → users.status: auto-cuenta solo para email nuevo; cuenta existente suspendida/baneada → 403.
+    if (user && user.status !== userStatusSchema.enum.active) {
+      throw new ApiError(ErrorCodes.FORBIDDEN);
+    }
     const userId = user ? user.id : userIdSchema.parse(randomUUID());
 
     // Sesión (jose) FUERA de la tx — la persistencia del refresh row va dentro de la transacción.
@@ -83,6 +87,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
             emailVerified: true,
             kind: userKindSchema.enum.registered,
             role: userRoleSchema.enum.user,
+            status: userStatusSchema.enum.active,
           }),
           createdAt: now.toISOString(),
         });

@@ -1,9 +1,9 @@
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, TokenIssuer, RefreshTokenRepository } from '../../domain/port/index.js';
+import type { Logger, TokenIssuer, RefreshTokenRepository, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { isRefreshExpired } from '../../domain/refreshExpiry.js';
-import { refreshTokenStatusSchema } from '../../domain/vo/index.js';
+import { refreshTokenStatusSchema, userStatusSchema } from '../../domain/vo/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -20,6 +20,7 @@ export type RefreshTokensResult = {
 
 export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshTokensResult> {
   constructor(
+    private readonly users: UserRepository,
     private readonly refreshTokens: RefreshTokenRepository,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
@@ -42,6 +43,13 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
     }
     if (isRefreshExpired(found.expiresAt, now)) {
       throw new ApiError(ErrorCodes.UNAUTHORIZED);
+    }
+
+    // doc 04 → users.status: el dueño del refresh suspendido/baneado no puede renovar sesión.
+    const owner = await this.users.findById(found.userId);
+    if (!owner) throw new ApiError(ErrorCodes.UNAUTHORIZED);
+    if (owner.status !== userStatusSchema.enum.active) {
+      throw new ApiError(ErrorCodes.FORBIDDEN);
     }
 
     // AC-02 rotación: par NUEVO + invalidar el usado.

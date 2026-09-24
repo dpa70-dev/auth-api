@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -55,6 +55,7 @@ export class CreateGuestSession implements UseCase<CreateGuestSessionCommand, Cr
           emailVerified: false,
           kind: userKindSchema.enum.guest,
           role: userRoleSchema.enum.user,
+          status: userStatusSchema.enum.active,
         }),
         createdAt: now.toISOString(),
       });

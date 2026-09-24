@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
-import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, userRoleSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
@@ -49,6 +49,10 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
       if (known.kind !== userKindSchema.enum.registered) {
         throw new ApiError(ErrorCodes.UNAUTHORIZED);
       }
+      // doc 04 → users.status: cuenta suspendida/baneada → 403 FORBIDDEN genérico (anti-enumeración).
+      if (known.status !== userStatusSchema.enum.active) {
+        throw new ApiError(ErrorCodes.FORBIDDEN);
+      }
       return this.withSession(
         { id: known.id, email: known.email, kind: known.kind, createdAt: known.createdAt },
         providerSchema.enum.google,
@@ -77,6 +81,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
           emailVerified: true,
           kind: userKindSchema.enum.registered,
           role: userRoleSchema.enum.user,
+          status: userStatusSchema.enum.active,
         }),
         createdAt: now.toISOString(),
       });

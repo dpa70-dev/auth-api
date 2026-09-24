@@ -13,3 +13,4 @@ export { VerifyOtp, OTP_MAX_ATTEMPTS, type VerifyOtpCommand, type VerifyOtpResul
 export { CreateGuestSession, type CreateGuestSessionCommand, type CreateGuestSessionResult } from './createGuestSession.js';
 export { UpgradeGuestAccount, type UpgradeGuestAccountCommand, type UpgradeGuestAccountResult } from './upgradeGuestAccount.js';
 export { SetUserRole, type SetUserRoleCommand } from './setUserRole.js';
+export { SetUserModerationStatus, type SetUserModerationStatusCommand, type SetUserModerationStatusResult } from './setUserModerationStatus.js';

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, PasswordHasher, TokenIssuer, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
-import { familyIdSchema, providerSchema, userKindSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, providerSchema, userKindSchema, userStatusSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS, LOG_REASONS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -46,6 +46,11 @@ export class Login implements UseCase<LoginCommand, LoginResult> {
     if (found.passwordHash === null) {
       this.logger.warn(LOG_EVENTS.LOGIN_FAILED, { reason: LOG_REASONS.GOOGLE_ONLY_USER, email: cmd.email });
       throw new ApiError(ErrorCodes.INVALID_CREDENTIALS);
+    }
+
+    // doc 04 → users.status: cuenta suspendida/baneada → 403 FORBIDDEN genérico (anti-enumeración).
+    if (found.status !== userStatusSchema.enum.active) {
+      throw new ApiError(ErrorCodes.FORBIDDEN);
     }
 
     const session = await issueSession(this.tokens, this.refreshTokens, {

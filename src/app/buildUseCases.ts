@@ -28,6 +28,7 @@ import {
   CreateGuestSession,
   UpgradeGuestAccount,
   SetUserRole,
+  SetUserModerationStatus,
 } from './useCases/index.js';
 
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
@@ -63,6 +64,8 @@ export type UseCases = {
   upgradeGuestAccount: UpgradeGuestAccount;
   /** Admin: asigna rol (defensa extra de requireRole; verifica actor + prohíbe auto-rol). */
   setUserRole: SetUserRole;
+  /** Admin: asigna estado de moderación (defensa extra de requireRole; revoca sesiones al bloquear). */
+  setUserModerationStatus: SetUserModerationStatus;
   /** null ⇔ GOOGLE_CLIENT_ID no configurado: la ruta existe pero responde 500 explícito. */
   loginGoogle: LoginGoogle | null;
 };
@@ -78,7 +81,7 @@ export const buildUseCases = (
 ): UseCases => ({
   registerUser: new RegisterUser(users, hasher, compromised, tokens, unitOfWork, logger, refreshTokens),
   login: new Login(users, hasher, tokens, logger, refreshTokens),
-  refreshTokens: new RefreshTokens(refreshTokens, tokens, logger),
+  refreshTokens: new RefreshTokens(users, refreshTokens, tokens, logger),
   logout: new Logout(refreshTokens, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
   consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, unitOfWork, logger, refreshTokens),
@@ -90,5 +93,6 @@ export const buildUseCases = (
   createGuestSession: new CreateGuestSession(users, tokens, unitOfWork, logger, refreshTokens),
   upgradeGuestAccount: new UpgradeGuestAccount(users, hasher, compromised, unitOfWork, logger),
   setUserRole: new SetUserRole(users, logger),
+  setUserModerationStatus: new SetUserModerationStatus(users, refreshTokens, logger),
   loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger, refreshTokens),
 });

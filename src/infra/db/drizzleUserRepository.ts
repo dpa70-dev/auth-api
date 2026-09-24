@@ -2,7 +2,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
 import type { UserRecord, UserRepository } from '../../domain/port/index.js';
 import { users } from '../../db/schema.js';
-import { userKindSchema, type Email, type GoogleSub, type PasswordHash, type Timestamp, type UserId, type UserRole } from '../../domain/vo/index.js';
+import { userKindSchema, type Email, type GoogleSub, type PasswordHash, type Timestamp, type UserId, type UserRole, type UserStatus } from '../../domain/vo/index.js';
 import { userSchema, type NewUser } from '../../domain/entity/user.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 
@@ -39,6 +39,7 @@ export class DrizzleUserRepository implements UserRepository {
         emailVerified: input.emailVerified,
         kind: input.kind,
         role: input.role,
+        status: input.status,
         createdAt: input.createdAt,
       }).run();
     } catch (err) {
@@ -71,5 +72,9 @@ export class DrizzleUserRepository implements UserRepository {
 
   async setRole(userId: UserId, role: UserRole): Promise<void> {
     this.db.update(users).set({ role }).where(eq(users.id, userId)).run();
+  }
+
+  async setModerationStatus(userId: UserId, status: UserStatus): Promise<void> {
+    this.db.update(users).set({ status }).where(eq(users.id, userId)).run();
   }
 }
