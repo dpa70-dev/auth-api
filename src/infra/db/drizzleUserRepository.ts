@@ -1,41 +1,15 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
-import type {
-  InsertRefreshToken,
-  UserRecord,
-  UserRepository,
-} from '../../domain/port/index.js';
-import { refreshTokens, users } from '../../db/schema.js';
-import { refreshTokenStatusSchema, userKindSchema, type Email, type FamilyId, type GoogleSub, type Jti, type PasswordHash, type Provider, type RefreshTokenStatus, type Timestamp, type UserId } from '../../domain/vo/index.js';
+import type { UserRecord, UserRepository } from '../../domain/port/index.js';
+import { users } from '../../db/schema.js';
+import { userKindSchema, type Email, type GoogleSub, type PasswordHash, type Timestamp, type UserId } from '../../domain/vo/index.js';
 import { userSchema, type NewUser } from '../../domain/entity/user.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
-
-const toIso = (d: Date | string): Timestamp => (typeof d === 'string' ? d : d.toISOString());
 
 const mapUserRow = (row: typeof users.$inferSelect): UserRecord =>
   // userSchema valida la invariante de la entidad al entrar (email obligatorio para non-guest,
   // kind ∈ {registered, guest}) — filas corruptas no llegan al dominio.
   userSchema.parse(row);
-
-const mapRefreshRow = (
-  row: typeof refreshTokens.$inferSelect,
-): {
-  jti: Jti;
-  tokenHash: string;
-  userId: UserId;
-  familyId: FamilyId;
-  provider: Provider;
-  status: RefreshTokenStatus;
-  expiresAt: Timestamp;
-} => ({
-  jti: row.jti as Jti,
-  tokenHash: row.tokenHash,
-  userId: row.userId as UserId,
-  familyId: row.familyId as FamilyId,
-  provider: row.provider as Provider,
-  status: row.status,
-  expiresAt: toIso(row.expiresAt),
-});
 
 export class DrizzleUserRepository implements UserRepository {
   constructor(private readonly db: BetterSQLite3Database) {}
@@ -53,11 +27,6 @@ export class DrizzleUserRepository implements UserRepository {
   async findById(id: UserId): Promise<UserRecord | null> {
     const row = this.db.select().from(users).where(eq(users.id, id)).get();
     return row ? mapUserRow(row) : null;
-  }
-
-  async findByRefreshTokenHash(tokenHash: string): Promise<RefreshRecord | null> {
-    const row = this.db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash)).get();
-    return row ? mapRefreshRow(row) : null;
   }
 
   async createUser(input: NewUser & { createdAt: Timestamp }): Promise<void> {
@@ -80,34 +49,6 @@ export class DrizzleUserRepository implements UserRepository {
     }
   }
 
-  async insertRefreshToken(token: InsertRefreshToken): Promise<void> {
-    this.db.insert(refreshTokens).values({
-      jti: token.jti,
-      tokenHash: token.tokenHash,
-      userId: token.userId,
-      familyId: token.familyId,
-      provider: token.provider,
-      expiresAt: toIso(token.expiresAt),
-      createdAt: new Date().toISOString(),
-    }).run();
-  }
-
-  async markRefreshTokenUsed(tokenHash: string): Promise<void> {
-    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.used }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
-  }
-
-  async revokeRefreshToken(tokenHash: string): Promise<void> {
-    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.tokenHash, tokenHash)).run();
-  }
-
-  async revokeFamily(familyId: FamilyId): Promise<void> {
-    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.familyId, familyId)).run();
-  }
-
-  async revokeAllForUser(userId: UserId): Promise<void> {
-    this.db.update(refreshTokens).set({ status: refreshTokenStatusSchema.enum.revoked }).where(eq(refreshTokens.userId, userId)).run();
-  }
-
   async markEmailVerified(email: Email): Promise<void> {
     this.db.update(users).set({ emailVerified: true }).where(eq(users.email, email)).run();
   }
@@ -127,5 +68,3 @@ export class DrizzleUserRepository implements UserRepository {
     }
   }
 }
-
-type RefreshRecord = NonNullable<Awaited<ReturnType<UserRepository['findByRefreshTokenHash']>>>;
