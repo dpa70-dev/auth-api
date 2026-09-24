@@ -17,6 +17,7 @@ import {
   type PlainPassword,
 } from '../src/domain/vo/index.js';
 import { DrizzleOtpRepository } from '../src/infra/db/drizzleOtpRepository.js';
+import { DrizzleRefreshTokenRepository } from '../src/infra/db/drizzleRefreshTokenRepository.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
 import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
 import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
@@ -43,6 +44,7 @@ describe('VerifyOtp — US-14 verificación de código OTP', () => {
   let db: BetterSQLite3Database;
   let otpCodes: DrizzleOtpRepository;
   let users: DrizzleUserRepository;
+  let refreshTokens: DrizzleRefreshTokenRepository;
   let uow: SqliteUnitOfWork;
   let sender: FakeEmailSender;
   const now = new Date('2026-01-01T00:00:00.000Z');
@@ -57,6 +59,7 @@ describe('VerifyOtp — US-14 verificación de código OTP', () => {
     migrate(db, { migrationsFolder: './migrations' });
     otpCodes = new DrizzleOtpRepository(db);
     users = new DrizzleUserRepository(db);
+    refreshTokens = new DrizzleRefreshTokenRepository(db);
     uow = new SqliteUnitOfWork(sqlite);
     sender = new FakeEmailSender();
   });
@@ -66,7 +69,7 @@ describe('VerifyOtp — US-14 verificación de código OTP', () => {
   });
 
   const verifyOtp = () =>
-    new VerifyOtp(users, otpCodes, verifyHasher, tokens, uow, silentLogger);
+    new VerifyOtp(users, otpCodes, verifyHasher, tokens, uow, silentLogger, refreshTokens);
 
   /** Emite un código real vía RequestOtp y devuelve el 6-dígitos que capturó el emisor. */
   const requestCode = async (to: Email, ttlMinutes = 5): Promise<string> => {
