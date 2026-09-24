@@ -66,12 +66,14 @@ const main = async (): Promise<void> => {
   const dbPath = readArg('--db-path') ?? process.env.DB_PATH ?? DB_PATH_DEFAULT;
   const dryRun = process.argv.slice(2).includes('--dry-run');
 
-  // Composition root del runner: único punto que conoce el adaptador concreto. Mismo setup que
-  // composeInfra (pragma FK + migrate) para operar sobre una DB real, incluso sin haber arrancado.
+  // Composition root del runner: único punto que conoce el adaptador concreto. Migrar SOLO si la
+  // DB nunca fue bootstrapeada (sin tabla users) — si el usuario ya existe (condición del script)
+  // el esquema vino de migraciones ya aplicadas y re-migrar sería DDL innecesario como side-effect.
   const sqlite = new Database(dbPath, { fileMustExist: false });
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite);
-  migrate(db, { migrationsFolder: './migrations' });
+  const schemaExists = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+  if (!schemaExists) migrate(db, { migrationsFolder: './migrations' });
   const users = new DrizzleUserRepository(db);
 
   // exactOptionalPropertyTypes: role no debe pasar undefined explícito — se omite si no viene.
