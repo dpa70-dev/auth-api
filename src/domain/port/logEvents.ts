@@ -33,6 +33,7 @@ export const LOG_EVENTS = {
   GUEST_SESSION_CREATED: 'guest_session_created',
   GUEST_UPGRADED: 'guest_upgraded',
   USER_ROLE_CHANGED: 'user_role_changed',
+  USER_STATUS_CHANGED: 'user_status_changed',
 } as const;
 
 /** Unión de eventos válidos: el puerto solo admite estos — compilar = no hay typos. */

@@ -43,6 +43,21 @@ Definido en `vo/refreshTokenStatus.ts` como `z.enum(['active', 'used', 'revoked'
 
 ---
 
+## Estados de Moderación del Usuario
+
+| Estado | Significado |
+|---|---|
+| `"active"` | Cuenta operativa: todos los flujos de emisión de sesión funcionan con normalidad. |
+| `"suspended"` | Cuenta bloqueada (temporal). Los flujos de emisión responden **403 FORBIDDEN** genérico (anti-enumeración) y **todas** sus sesiones se revocan al suspender. |
+| `"banned"` | Cuenta bloqueada (definitivo). Mismo comportamiento que `"suspended"`; la distinción es política (ban sin borrar la fila). |
+
+Lo muta solo `PATCH /admin/users/{id}/status` (require auth + `requireRole('admin')`),
+que retorna `200 { data: { id, status } }`. Volver a `active` NO re-emite sesiones. Definido
+en `vo/userStatus.ts` como `z.enum(['active', 'suspended', 'banned'])`. Eje independiente de
+`kind` (identidad) y `role` (permisos) — sin kitchen-sink (doc 04 → §3).
+
+---
+
 ## Contraseña y Hash
 
 | Término | Definición |
@@ -62,6 +77,8 @@ Definido en `vo/refreshTokenStatus.ts` como `z.enum(['active', 'used', 'revoked'
 | **Email** | Email del usuario en `users.email`. | Normalizado a minúsculas, trim, max 254 chars. Índice único. |
 | **PasswordHash** | Hash Argon2 de la contraseña. | String (nullable: `null` si es solo-Google). |
 | **GoogleSub** | Identificador `sub` del token ID de Google. | String (nullable: `null` si es solo-local). |
+| **UserRole** | Rol de autorización del usuario. | Enum: `"user"`, `"admin"` (schema en `vo/userRole.ts`). |
+| **UserStatus** | Estado de moderación del usuario. | Enum: `"active"`, `"suspended"`, `"banned"` (schema en `vo/userStatus.ts`). |
 | **Timestamp** | Marca de tiempo ISO 8601. | `string` en formato ISO (ej: `2026-09-04T...`). |
 | **Provider** | Indicador del proveedor de autenticación. | Enum: `"local"`, `"google"`, `"magic"` (schema en `vo/provider.ts`). |
 
@@ -76,6 +93,9 @@ Definido en `vo/refreshTokenStatus.ts` como `z.enum(['active', 'used', 'revoked'
 | `passwordHash` | `PasswordHash \| null` | `null` si es solo-Google |
 | `googleSub` | `GoogleSub \| null` | `null` si es solo-local |
 | `emailVerified` | `boolean` | `false` para registro local, `true` para Google o magic link |
+| `kind` | `UserKind` | `"registered"` (con identidad) o `"guest"` (anónima, US-15) |
+| `role` | `UserRole` | `"user"` (default) o `"admin"` (US-17: `PATCH /admin/users/{id}/role`) |
+| `status` | `UserStatus` | `"active"` (default), `"suspended"` o `"banned"` (US-18/19/20: `PATCH /admin/users/{id}/status`) |
 | `createdAt` | `Timestamp` | ISO 8601 |
 
 **Invariantes:** No se permite usuario con `passwordHash = null` **y** `googleSub = null` (CHECK en BD + refinamiento Zod en `entity/user.ts`).

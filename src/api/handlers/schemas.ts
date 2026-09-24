@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { emailSchema, magicLinkPurposeSchema, otpCodeSchema, plainPasswordSchema, userRoleSchema } from '../../domain/vo/index.js';
+import { emailSchema, magicLinkPurposeSchema, otpCodeSchema, plainPasswordSchema, userRoleSchema, userStatusSchema } from '../../domain/vo/index.js';
 
 /** Schemas de la frontera (doc 03 → CredentialsRequest/RefreshRequest/GoogleRequest).
  *  Se componen sobre los schemas de los VOs (doc 00 → ítem 88: composición, no redeclaración):
@@ -62,4 +62,9 @@ export const upgradeGuestRequest = z.object({
 /** PATCH /admin/users/:id/role: rol de autorización a asignar — VO brandeado en la frontera. */
 export const setUserRoleRequest = z.object({
   role: userRoleSchema,
+});
+
+/** PATCH /admin/users/:id/status: estado de moderación a asignar — VO brandeado en la frontera. */
+export const setUserModerationStatusRequest = z.object({
+  status: userStatusSchema,
 });

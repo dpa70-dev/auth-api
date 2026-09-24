@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, OtpRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -67,6 +67,10 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
 
     // Estado actual (usuario) FUERA de la tx; las escrituras que dependen de él van atómicas dentro.
     const user = await this.users.findByEmail(cmd.email);
+    // doc 04 → users.status: auto-cuenta solo para email nuevo; cuenta existente suspendida/baneada → 403.
+    if (user && user.status !== userStatusSchema.enum.active) {
+      throw new ApiError(ErrorCodes.FORBIDDEN);
+    }
     const userId = user ? user.id : userIdSchema.parse(randomUUID());
 
     // Sesión (jose) FUERA de la tx — la persistencia del refresh row va dentro de la transacción.
@@ -93,6 +97,7 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
             emailVerified: true,
             kind: userKindSchema.enum.registered,
             role: userRoleSchema.enum.user,
+            status: userStatusSchema.enum.active,
           }),
           createdAt: now.toISOString(),
         });

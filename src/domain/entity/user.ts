@@ -12,6 +12,7 @@ import {
   userIdSchema,
   userKindSchema,
   userRoleSchema,
+  userStatusSchema,
   type Email,
   type GoogleSub,
   type PasswordHash,
@@ -19,6 +20,7 @@ import {
   type UserId,
   type UserKind,
   type UserRole,
+  type UserStatus,
 } from '../vo/index.js';
 import { z } from 'zod';
 
@@ -35,6 +37,7 @@ export type User = {
   readonly emailVerified: boolean;
   readonly kind: UserKind;
   readonly role: UserRole;
+  readonly status: UserStatus;
   readonly createdAt: Timestamp;
 };
 
@@ -50,6 +53,8 @@ export type NewUser = {
   readonly kind: UserKind;
   /** user (default) · admin: eje de autorización (doc 04 → users.role) — se asigna solo por un admin. */
   readonly role: UserRole;
+  /** active (default) · suspended/banned: eje de moderación (doc 04 → users.status) — se asigna solo por un admin. */
+  readonly status: UserStatus;
 };
 
 export const newUserSchema = z
@@ -61,6 +66,7 @@ export const newUserSchema = z
     emailVerified: z.boolean(),
     kind: userKindSchema.default('registered'),
     role: userRoleSchema.default('user'),
+    status: userStatusSchema.default('active'),
   })
   .refine(
     (u) => {

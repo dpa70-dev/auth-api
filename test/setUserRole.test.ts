@@ -5,7 +5,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { SetUserRole } from '../src/app/useCases/index.js';
 import type { Logger, UserRepository } from '../src/domain/port/index.js';
-import { emailSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type UserId } from '../src/domain/vo/index.js';
+import { emailSchema, userIdSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type UserId } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
@@ -40,6 +40,7 @@ describe('SetUserRole — eje de autorización (US-??, doc 04 → users.role)', 
       emailVerified: kind === 'registered',
       kind: kind === 'registered' ? userKindSchema.enum.registered : userKindSchema.enum.guest,
       role: role === 'admin' ? userRoleSchema.enum.admin : userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     return id;

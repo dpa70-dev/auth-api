@@ -271,3 +271,48 @@ guards. Revocación inmediata: degradar a un admin surte efecto en el siguiente 
 (165 previos + 17 nuevos: `userRole.test.ts` 6 + `setUserRole.test.ts` 6 +
 `adminRole.test.ts` 5) ✓ · `contract` regenerado ✓ · merge `feat/user-roles` a main
 `--no-ff` ✓. *(Estado vigente del repo al 23-sep-2026.)*
+
+---
+
+## §19 — `feat/user-moderation-status` (US-18/19/20): eje de moderación `users.status`
+
+**Decisión (23-sep-2026)**: el estado de moderación es un **tercer eje** independiente
+de `kind` (identidad) y `role` (permisos) — un único enum `users.status` con tres
+valores (`'active'`/`'suspended'`/`'banned'`). El bloqueo responde **403 FORBIDDEN
+genérico** (anti-enumeración: no revela qué crédito de moderación aplica — nada de
+códigos `ACCOUNT_SUSPENDED`/`ACCOUNT_BANNED`). La baneabilidad es **inmediata**: al
+pasar a `suspended`/`banned` se revocan todas las sesiones del usuario
+(`revokeAllForUser`); volver a `active` NO re-emite sesiones (el usuario re-autentica).
+
+**Cambios**:
+- **Dominio**: VO `UserStatus` (`userStatusValues`, zod enum) en
+  `domain/vo/userStatus.ts`; `User.status`/`NewUser.status` en la entidad
+  (`newUserSchema` con `default('active')`); puerto
+  `UserRepository.setModerationStatus(userId, status)`; `LOG_EVENTS.USER_STATUS_CHANGED`.
+- **DB**: `users.status TEXT NOT NULL DEFAULT 'active' CHECK (status IN
+  ('active','suspended','banned'))` (migración `0008_user_moderation_status.sql` —
+  table-rebuild del patrón 0007, rows → default `'active'`). Nacimiento de usuario:
+  todos los flujos (`registerUser`, `createGuestSession`, alta implícita OTP/magic/Google)
+  crean `status: 'active'` explícito — **ningún flujo público crea usuarios bloqueados**.
+- **App**: `SetUserModerationStatus` (use case): actor inexistente → `UNAUTHORIZED`
+  (defensivo), `actor.role !== 'admin'` → `FORBIDDEN`, target inexistente → `NOT_FOUND`;
+  transiciones libres entre los 3 valores; retorna `{ id, status }`; al pasar a
+  `suspended`/`banned` revoca todas las sesiones del target (`revokeAllForUser` — dentro
+  del mismo use case, fuera de tx); loguea `LOG_EVENTS.USER_STATUS_CHANGED`.
+- **Guards de emisión**: todo flujo que resuelve un usuario existente para emitir sesión
+  (login, loginGoogle, refreshTokens, consumeMagicLink, verifyOtp) chequea
+  `user.status !== 'active'` → `403 FORBIDDEN` antes de emitir. `registerUser` y
+  `createGuestSession` crean usuario nuevo (siempre `active`) → sin guard.
+- **API**: `PATCH /admin/users/{id}/status` con body `SetUserModerationStatusRequest`
+  (`{ status: 'active' | 'suspended' | 'banned' }`) → **200 `{ data: { id, status } }`**;
+  ruta registrada con guards `[requireAuth, requireRole('admin')]` (mismo molde que
+  `PATCH /admin/users/{id}/role`); `adminHandlers.setUserModerationStatusHandler` con
+  `userIdSchema.parse` de params → 422.
+- **Contrato** (`docs/03-openapi.yaml` + `src/api/contract.ts` regenerado): path
+  `PATCH /admin/users/{id}/status` + schemas `UserStatus`, `SetUserModerationStatusRequest`,
+  `SetUserModerationStatusResponse`.
+
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **199/199** en 25 archivos
+(182 previos + 17 nuevos: `userStatus.test.ts` 4 + `setUserModerationStatus.test.ts` 5 +
+`adminStatus.test.ts` 8) ✓ · `contract` regenerado ✓ · merge `feat/user-moderation-status`
+a main `--no-ff` ✓. *(Estado vigente del repo al 23-sep-2026.)*

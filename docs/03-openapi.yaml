@@ -859,6 +859,65 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
+  /admin/users/{id}/status:
+    patch:
+      tags: [Admin]
+      operationId: setUserModerationStatus
+      summary: Asignar el estado de moderación de un usuario (active → suspended/banned o viceversa)
+      description: |
+        Eje de moderación (doc 04 → users.status): solo un **admin** puede suspender/banear/
+        reinstalar (403 `FORBIDDEN` si el actor no lo es). Transiciones libres: cualquier estado
+        → cualquier estado (el un-ban es una decisión administrativa legítima). Al pasar a
+        `suspended`/`banned` se revocan TODAS las sesiones del usuario objetivo (el access token
+        muere en su TTL corto y el refresh queda inútil); volver a `active` NO re-emite sesiones
+        (el usuario re-autentica). 403 `FORBIDDEN` genérico en los flujos de emisión (login/refresh)
+        para cuentas no activas, sin revelar el estado exacto (anti-enumeración). **200** con el
+        estado resultante.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID v4 del usuario objetivo (users.id).
+          schema:
+            type: string
+            format: uuid
+            example: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserModerationStatusRequest'
+            examples:
+              suspender:
+                summary: Suspender un usuario
+                value:
+                  status: suspended
+      responses:
+        '200':
+          description: Estado de moderación actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetUserModerationStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedGeneric'
+        '403':
+          $ref: '#/components/responses/ForbiddenGeneric'
+        '404':
+          description: El usuario objetivo no existe (`NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -1102,6 +1161,38 @@ components:
       properties:
         role:
           $ref: '#/components/schemas/UserRole'
+    UserStatus:
+      type: string
+      enum: [active, suspended, banned]
+      description: |
+        Estado de MODERACIÓN (eje independiente de kind y role — doc 04 → users.status): responde
+        a "¿qué puede hacer esta cuenta?" respecto a su estado. `active` = default de creación;
+        `suspended`/`banned` = asignados solo por un admin y bloquean la emisión de sesiones
+        (403 `FORBIDDEN` genérico en login/refresh, anti-enumeración) + revocan todas las sesiones
+        activas del usuario. Volver a `active` NO re-emite sesiones: el usuario re-autentica.
+      example: active
+    SetUserModerationStatusRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          $ref: '#/components/schemas/UserStatus'
+    SetUserModerationStatusResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              $ref: '#/components/schemas/UserStatus'
     AuthResponse:
       type: object
       required: [data]

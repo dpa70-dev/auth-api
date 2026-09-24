@@ -13,6 +13,7 @@ import {
   userIdSchema,
   userKindSchema,
   userRoleSchema,
+  userStatusSchema,
   type Email,
   type PasswordHash,
   type PlainPassword,
@@ -128,6 +129,7 @@ describe('VerifyOtp — US-14 verificación de código OTP', () => {
       emailVerified: false,
       kind: userKindSchema.enum.registered,
       role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: '2025-01-01T00:00:00.000Z',
     });
     const rawCode = await requestCode(to);

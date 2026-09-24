@@ -25,6 +25,7 @@ export type Handlers = {
   guestUpgradeHandler: RequestHandler;
   meHandler: RequestHandler;
   setUserRoleHandler: RequestHandler;
+  setUserModerationStatusHandler: RequestHandler;
 };
 
 /** Construye los handlers a partir de los casos de uso y las dependencias de la frontera. */
