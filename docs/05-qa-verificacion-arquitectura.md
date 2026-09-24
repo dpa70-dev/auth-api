@@ -263,8 +263,12 @@ guards. Revocación inmediata: degradar a un admin surte efecto en el siguiente 
 - **Bootstrap del primer admin**: decisión ratificada — como ningún usuario nace admin y
   `SetUserRole` exige actor admin (chicken-and-egg), el primer admin se promueve con un
   **script operacional** `npm run promote:admin -- --email=<email>`
-  (`scripts/promoteAdmin.ts`, fuera del contrato HTTP, `--dry-run`/`--role=user`
-  soportados, usa `DB_PATH` — revisar doc 04 → §3 `users.role`). El fundador se
+  (`scripts/promoteAdmin.ts`, runner fino que resuelve el adaptador SQLite/Drizzle;
+  lógica **desacoplada** en `scripts/promoteUserRole.ts` — pura sobre el puerto
+  `UserRepository` (DIP), validación Zod de email/rol, `findByEmail` → noop si ya tiene el
+  rol → `setRole` solo si no es dry-run; resultado en unión discriminada; `--dry-run`/
+  `--role=user` soportados, usa `DB_PATH` — revisar doc 04 → §3 `users.role`; 8 tests unit
+  con fake en memoria de `UserRepository`). El fundador se
   auto-registra y el script lo promueve; luego `PATCH /admin/users/{id}/role` gestiona
   el resto. Se descartaron: env `BOOTSTRAP_ADMIN_EMAIL` (riesgo de resucitar admins
   degradados si queda olvidada, salvo sentinela en DB) y `first-user-is-admin`
@@ -321,7 +325,8 @@ pasar a `suspended`/`banned` se revocan todas las sesiones del usuario
   `PATCH /admin/users/{id}/status` + schemas `UserStatus`, `SetUserModerationStatusRequest`,
   `SetUserModerationStatusResponse`.
 
-**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **199/199** en 25 archivos
-(182 previos + 17 nuevos: `userStatus.test.ts` 4 + `setUserModerationStatus.test.ts` 5 +
-`adminStatus.test.ts` 8) ✓ · `contract` regenerado ✓ · merge `feat/user-moderation-status`
-a main `--no-ff` ✓. *(Estado vigente del repo al 23-sep-2026.)*
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **207/207** en 26 archivos
+(199 previos + 8 nuevos en `test/promoteUserRole.test.ts`: promueve/degrada/noop/dry-run/
+default admin/not-found/email inválido/rol inválido — fake en memoria de `UserRepository`) ✓
+· `contract` sin cambios ✓ · merge `feat/promote-admin-script` a main `--no-ff` ✓.
+*(Estado vigente del repo al 24-sep-2026.)*

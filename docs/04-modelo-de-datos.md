@@ -201,10 +201,11 @@ en la API?". **NO es identidad (`kind`) ni estado de moderación.**
   prohibido auto-rol, 204 vacío).
 - **Bootstrap del primer admin**: como `SetUserRole` exige un actor admin y ningún
   usuario nace admin, el primer admin se promueve **fuera del contrato HTTP** con
-  `npm run promote:admin -- --email=<email>` (`scripts/promoteAdmin.ts`, operación de
-  operador contra la DB real — lee `DB_PATH` con el mismo default que `config.ts`
-  (`data/app.sqlite`), reutiliza `DrizzleUserRepository.setRole`, `--dry-run` para
-  ensayar, `--role=user` para degradar).
+  `npm run promote:admin -- --email=<email>` (`scripts/promoteAdmin.ts`, runner fino que
+  resuelve el adaptador SQLite/Drizzle; la lógica vive en `scripts/promoteUserRole.ts`,
+  **desacoplada del motor**: depende solo del puerto `UserRepository` — lee `DB_PATH` con
+  el mismo default que `config.ts` (`data/app.sqlite`), `--dry-run` para ensayar,
+  `--role=user` para degradar; testeada con fake en memoria, doc 05 → §18).
   El fundador se auto-registra (rol `'user'`) y el script lo promueve; desde ahí
   `PATCH /admin/users/{id}/role` gestiona el resto.
 - **Regla de diseño (no violar)**: `role` es el eje PERMISOS. No se consulta en la
