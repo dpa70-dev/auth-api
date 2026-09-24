@@ -199,6 +199,14 @@ en la API?". **NO es identidad (`kind`) ni estado de moderación.**
   `createGuestSession`, ni alta implícita OTP/magic/Google crean admins), y
   `PATCH /admin/users/{id}/role` (`SetUserRole` — require auth + requireRole('admin'),
   prohibido auto-rol, 204 vacío).
+- **Bootstrap del primer admin**: como `SetUserRole` exige un actor admin y ningún
+  usuario nace admin, el primer admin se promueve **fuera del contrato HTTP** con
+  `npm run promote:admin -- --email=<email>` (`scripts/promoteAdmin.ts`, operación de
+  operador contra la DB real — lee `DB_PATH` con el mismo default que `config.ts`
+  (`data/app.sqlite`), reutiliza `DrizzleUserRepository.setRole`, `--dry-run` para
+  ensayar, `--role=user` para degradar).
+  El fundador se auto-registra (rol `'user'`) y el script lo promueve; desde ahí
+  `PATCH /admin/users/{id}/role` gestiona el resto.
 - **Regla de diseño (no violar)**: `role` es el eje PERMISOS. No se consulta en la
   firma de tokens (el rol viaja en DB y se lee por request — revocación inmediata),
   no se auto-asigna admin por ningún flujo público, y los estados de moderación

@@ -260,6 +260,15 @@ guards. Revocación inmediata: degradar a un admin surte efecto en el siguiente 
 - **App**: `SetUserRole` (use case): actor inexistente → `UNAUTHORIZED` (defensivo),
   `actor.role !== 'admin'` → `FORBIDDEN`, auto-rol → `FORBIDDEN`, target inexistente →
   `NOT_FOUND`; loguea `LOG_EVENTS.USER_ROLE_CHANGED`.
+- **Bootstrap del primer admin**: decisión ratificada — como ningún usuario nace admin y
+  `SetUserRole` exige actor admin (chicken-and-egg), el primer admin se promueve con un
+  **script operacional** `npm run promote:admin -- --email=<email>`
+  (`scripts/promoteAdmin.ts`, fuera del contrato HTTP, `--dry-run`/`--role=user`
+  soportados, usa `DB_PATH` — revisar doc 04 → §3 `users.role`). El fundador se
+  auto-registra y el script lo promueve; luego `PATCH /admin/users/{id}/role` gestiona
+  el resto. Se descartaron: env `BOOTSTRAP_ADMIN_EMAIL` (riesgo de resucitar admins
+  degradados si queda olvidada, salvo sentinela en DB) y `first-user-is-admin`
+  (inseguro: tras un reset de BD cualquiera obtiene admin).
 - **API**: `requireRole(role, users)` (composición con `requireAuth` — asume `req.userId`,
   sin re-parsear el token); handler `setUserRoleHandler` (`userIdSchema.parse` de params →
   422, `writeSuccess(res, 204, null)`); ruta `PATCH` registrada con guards
