@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "contract": "openapi-typescript docs/03-openapi.yaml -o src/api/contract.ts",
     "gen:password-list": "tsx scripts/topPasswords.ts",
+    "promote:admin": "tsx scripts/promoteAdmin.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "lint": "eslint ."
