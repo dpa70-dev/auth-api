@@ -1,6 +1,6 @@
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { Logger, TokenIssuer, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { isRefreshExpired } from '../../domain/refreshExpiry.js';
 import { refreshTokenStatusSchema } from '../../domain/vo/index.js';
@@ -13,7 +13,7 @@ export type LogoutCommand = {
 
 export class Logout implements UseCase<LogoutCommand, void> {
   constructor(
-    private readonly users: UserRepository,
+    private readonly refreshTokens: RefreshTokenRepository,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
   ) {}
@@ -26,13 +26,13 @@ export class Logout implements UseCase<LogoutCommand, void> {
   async execute(cmd: LogoutCommand): Promise<void> {
     const now = cmd.now ?? new Date();
     const tokenHash = await this.tokens.hashRefreshToken(cmd.refreshToken);
-    const found = await this.users.findByRefreshTokenHash(tokenHash);
+    const found = await this.refreshTokens.findByRefreshTokenHash(tokenHash);
 
     // 401 genérico: token ausente/desconocido (semántica transversal, AC-03).
     if (!found || found.status !== refreshTokenStatusSchema.enum.active) throw new ApiError(ErrorCodes.UNAUTHORIZED);
     if (isRefreshExpired(found.expiresAt, now)) throw new ApiError(ErrorCodes.UNAUTHORIZED);
 
-    await this.users.revokeRefreshToken(tokenHash);
+    await this.refreshTokens.revokeRefreshToken(tokenHash);
     this.logger.info(LOG_EVENTS.USER_LOGGED_OUT, { userId: found.userId, jti: found.jti });
   }
 }

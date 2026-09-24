@@ -6,6 +6,7 @@ import type {
   CompromisedPasswordChecker,
   Logger,
   PasswordHasher,
+  RefreshTokenRepository,
   TokenIssuer,
   UnitOfWork,
   UserRecord,
@@ -38,6 +39,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
     private readonly tokens: TokenIssuer,
     private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: RegisterUserCommand): Promise<RegisterUserResult> {
@@ -86,7 +88,7 @@ export class RegisterUser implements UseCase<RegisterUserCommand, RegisterUserRe
         if (err instanceof UniqueConstraintViolation) throw collisionError(existing);
         throw err;
       }
-      await this.users.insertRefreshToken(session.refreshRow);
+      await this.refreshTokens.insertRefreshToken(session.refreshRow);
     });
 
     this.logger.info(LOG_EVENTS.USER_REGISTERED, { userId: id, provider: providerSchema.enum.local });

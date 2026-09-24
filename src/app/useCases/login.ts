@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, PasswordHasher, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { Logger, PasswordHasher, TokenIssuer, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { familyIdSchema, providerSchema, userKindSchema, type Email, type PlainPassword, type UserId } from '../../domain/vo/index.js';
 import { LOG_EVENTS, LOG_REASONS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
@@ -26,6 +26,7 @@ export class Login implements UseCase<LoginCommand, LoginResult> {
     private readonly hasher: PasswordHasher,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: LoginCommand): Promise<LoginResult> {
@@ -47,7 +48,7 @@ export class Login implements UseCase<LoginCommand, LoginResult> {
       throw new ApiError(ErrorCodes.INVALID_CREDENTIALS);
     }
 
-    const session = await issueSession(this.tokens, this.users, {
+    const session = await issueSession(this.tokens, this.refreshTokens, {
       userId: found.id,
       familyId: familyIdSchema.parse(randomUUID()),
       provider: providerSchema.enum.local,

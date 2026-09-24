@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, RefreshTokenRepository, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, userKindSchema, type PlainPassword } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
@@ -27,6 +27,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
     private readonly tokens: TokenIssuer,
     private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: ResetPasswordCommand): Promise<void> {
@@ -90,7 +91,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
       // Un solo uso: consumir invalida el link (patrón consume).
       await this.magicLinks.markUsed(tokenHash);
       // F1 (misma política que change-password): el reset derriba TODAS las sesiones del usuario.
-      await this.users.revokeAllForUser(userId);
+      await this.refreshTokens.revokeAllForUser(userId);
     });
 
     this.logger.info(LOG_EVENTS.PASSWORD_RESET_CONSUMED, { userId });

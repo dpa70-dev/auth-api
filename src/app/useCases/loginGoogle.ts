@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
-import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
@@ -29,6 +29,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
     private readonly verifier: GoogleIdTokenVerifier,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: LoginGoogleCommand): Promise<LoginGoogleResult> {
@@ -101,7 +102,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
     now: Date,
     refreshTtlDays: number,
   ): Promise<LoginGoogleResult> {
-    const session = await issueSession(this.tokens, this.users, {
+    const session = await issueSession(this.tokens, this.refreshTokens, {
       userId: user.id,
       familyId: familyIdSchema.parse(randomUUID()),
       provider,

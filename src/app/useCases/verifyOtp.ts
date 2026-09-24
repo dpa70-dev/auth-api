@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, OtpRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
+import type { Logger, OtpRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
@@ -39,6 +39,7 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
     private readonly tokens: TokenIssuer,
     private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: VerifyOtpCommand): Promise<VerifyOtpResult> {
@@ -98,7 +99,7 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
       }
       // Un solo uso: verificar invalida el código.
       await this.otpCodes.markStatus(found.id, otpStatusSchema.enum.used);
-      await this.users.insertRefreshToken(session.refreshRow);
+      await this.refreshTokens.insertRefreshToken(session.refreshRow);
     });
 
     this.logger.info(LOG_EVENTS.OTP_VERIFIED, { userId });
