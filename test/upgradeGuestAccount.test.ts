@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { UpgradeGuestAccount } from '../src/app/useCases/index.js';
-import type { CompromisedPasswordChecker, Logger, PasswordHasher, UserRepository } from '../src/domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, PasswordHasher, UserRepository, RefreshTokenRepository } from '../src/domain/port/index.js';
 import {
   emailSchema,
   familyIdSchema,
@@ -19,6 +19,7 @@ import {
   type UserId,
 } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
+import { DrizzleRefreshTokenRepository } from '../src/infra/db/drizzleRefreshTokenRepository.js';
 import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
 
 const silentLogger: Logger = { info() {}, warn() {}, error() {} };
@@ -37,6 +38,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
   let sqlite: Database.Database;
   let db: BetterSQLite3Database;
   let users: UserRepository;
+  let refreshTokens: RefreshTokenRepository;
   let uow: SqliteUnitOfWork;
   const email = (s: string): Email => emailSchema.parse(s);
 
@@ -46,6 +48,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
     db = drizzle(sqlite);
     migrate(db, { migrationsFolder: './migrations' });
     users = new DrizzleUserRepository(db);
+    refreshTokens = new DrizzleRefreshTokenRepository(db);
     uow = new SqliteUnitOfWork(sqlite);
   });
 
@@ -74,7 +77,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
   /** Inserta un refresh token activo para el user (sesión guest legítima). */
   const insertActiveRefresh = async (userId: UserId): Promise<string> => {
     const tokenHash = `stub-refresh-${randomUUID()}`;
-    await users.insertRefreshToken({
+    await refreshTokens.insertRefreshToken({
       jti: jtiSchema.parse(randomUUID()),
       tokenHash,
       userId,
@@ -109,7 +112,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
 
     await upgrade().execute({ userId: guestId, email: email('sin-revoke@example.com'), password: 'nueva-Pass-123' });
 
-    const row = await users.findByRefreshTokenHash(tokenHash);
+    const row = await refreshTokens.findByRefreshTokenHash(tokenHash);
     expect(row).not.toBeNull();
     expect(row!.status).toBe(refreshTokenStatusSchema.enum.active);
     expect(row!.provider).toBe(providerSchema.enum.guest);
@@ -157,7 +160,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
       upgrade(makeChecker('compromised')).execute({
         userId: guestId,
         email: email('pasada@example.com'),
-        password: 'contraseña-viejísima-1',
+        password: 'contraseña-viejísima-1-',
       }),
     ).rejects.toMatchObject({ code: 'PASSWORD_COMPROMISED' });
   });

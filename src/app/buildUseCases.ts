@@ -6,6 +6,7 @@ import type {
   MagicLinkRepository,
   OtpRepository,
   PasswordHasher,
+  RefreshTokenRepository,
   TokenIssuer,
   UnitOfWork,
   UserRepository,
@@ -31,6 +32,7 @@ import {
 /** Puertos (interfaces de dominio) que los casos de uso necesitan para operar. */
 export type Ports = {
   users: UserRepository;
+  refreshTokens: RefreshTokenRepository;
   hasher: PasswordHasher;
   tokens: TokenIssuer;
   magicLinks: MagicLinkRepository;
@@ -68,21 +70,21 @@ export type UseCases = {
  * en infra, que solo instancia implementaciones externas. La sesión se ensambla en index.ts.
  */
 export const buildUseCases = (
-  { users, hasher, tokens, magicLinks, otpCodes, sender, compromised, google, unitOfWork }: Ports,
+  { users, refreshTokens, hasher, tokens, magicLinks, otpCodes, sender, compromised, google, unitOfWork }: Ports,
   logger: Logger,
 ): UseCases => ({
-  registerUser: new RegisterUser(users, hasher, compromised, tokens, unitOfWork, logger),
-  login: new Login(users, hasher, tokens, logger),
-  refreshTokens: new RefreshTokens(users, tokens, logger),
-  logout: new Logout(users, tokens, logger),
+  registerUser: new RegisterUser(users, hasher, compromised, tokens, unitOfWork, logger, refreshTokens),
+  login: new Login(users, hasher, tokens, logger, refreshTokens),
+  refreshTokens: new RefreshTokens(refreshTokens, tokens, logger),
+  logout: new Logout(refreshTokens, tokens, logger),
   requestMagicLink: new RequestMagicLink(magicLinks, tokens, sender, logger),
-  consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, unitOfWork, logger),
+  consumeMagicLink: new ConsumeMagicLink(users, magicLinks, tokens, unitOfWork, logger, refreshTokens),
   requestOtp: new RequestOtp(otpCodes, hasher, sender, logger),
-  verifyOtp: new VerifyOtp(users, otpCodes, hasher, tokens, unitOfWork, logger),
+  verifyOtp: new VerifyOtp(users, otpCodes, hasher, tokens, unitOfWork, logger, refreshTokens),
   me: new GetMe(users, logger),
-  changePassword: new ChangePassword(users, hasher, compromised, logger),
-  resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, unitOfWork, logger),
-  createGuestSession: new CreateGuestSession(users, tokens, unitOfWork, logger),
+  changePassword: new ChangePassword(users, hasher, compromised, logger, refreshTokens),
+  resetPassword: new ResetPassword(users, magicLinks, hasher, compromised, tokens, unitOfWork, logger, refreshTokens),
+  createGuestSession: new CreateGuestSession(users, tokens, unitOfWork, logger, refreshTokens),
   upgradeGuestAccount: new UpgradeGuestAccount(users, hasher, compromised, unitOfWork, logger),
-  loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger),
+  loginGoogle: google === null ? null : new LoginGoogle(users, google, tokens, logger, refreshTokens),
 });

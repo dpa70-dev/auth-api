@@ -7,6 +7,7 @@ import { RegisterUser } from '../src/app/useCases/registerUser.js';
 import type { CompromisedPasswordChecker, Logger, PasswordHasher, TokenIssuer } from '../src/domain/port/index.js';
 import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, userKindSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
+import { DrizzleRefreshTokenRepository } from '../src/infra/db/drizzleRefreshTokenRepository.js';
 import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
 import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
 
@@ -43,6 +44,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
 
   it('persiste las escrituras del callback cuando todas tienen éxito (COMMIT)', async () => {
     const users = new DrizzleUserRepository(db);
+    const refreshTokens = new DrizzleRefreshTokenRepository(db);
     const id = userIdSchema.parse(randomUUID());
 
     await uow.withTransaction(async () => {
@@ -55,7 +57,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
         kind: userKindSchema.enum.registered,
         createdAt: now(),
       });
-      await users.insertRefreshToken({
+      await refreshTokens.insertRefreshToken({
         jti: jtiSchema.parse(randomUUID()),
         tokenHash: createHash('sha256').update('raw').digest('hex'),
         userId: id,
@@ -130,14 +132,15 @@ describe('RegisterUser — uso del UnitOfWork', () => {
 
   it('NO deja usuario creado si el segundo write (insertRefreshToken) falla', async () => {
     const users = new DrizzleUserRepository(db);
+    const refreshTokens = new DrizzleRefreshTokenRepository(db);
     // Repo que falla SOLO en el insert del refresh — el createUser usa el repo real.
-    const failingUsers = new (class extends DrizzleUserRepository {
+    const failingRefreshTokens = new (class extends DrizzleRefreshTokenRepository {
       override async insertRefreshToken(): Promise<void> {
         throw new Error('forced failure on refresh insert');
       }
     })(db);
 
-    const registerUser = new RegisterUser(failingUsers, stubHasher, noOpCompromisedChecker, testTokens, uow, silentLogger);
+    const registerUser = new RegisterUser(users, stubHasher, noOpCompromisedChecker, testTokens, uow, silentLogger, failingRefreshTokens);
 
     await expect(
       registerUser.execute({
@@ -148,12 +151,13 @@ describe('RegisterUser — uso del UnitOfWork', () => {
     ).rejects.toThrow('forced failure on refresh insert');
 
     expect(await users.findByEmail(emailOf('noparcial@example.com'))).toBeNull();
-    expect(sqlite.inTransaction).toBe(false);
+    expect(await refreshTokens.findByRefreshTokenHash(createHash('sha256').update('raw').digest('hex'))).toBeNull();
   });
 
   it('crea usuario + refresh token consistentemente cuando todo funciona', async () => {
     const users = new DrizzleUserRepository(db);
-    const registerUser = new RegisterUser(users, stubHasher, noOpCompromisedChecker, testTokens, uow, silentLogger);
+    const refreshTokens = new DrizzleRefreshTokenRepository(db);
+    const registerUser = new RegisterUser(users, stubHasher, noOpCompromisedChecker, testTokens, uow, silentLogger, refreshTokens);
 
     const email = emailOf('completo@example.com');
     const result = await registerUser.execute({ email, password: 'secreta123' as PlainPassword, refreshTtlDays: 15 });

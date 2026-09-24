@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, MagicLinkRepository, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
+import type { Logger, MagicLinkRepository, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, magicLinkPurposeSchema, magicLinkStatusSchema, providerSchema, userIdSchema, userKindSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
@@ -27,6 +27,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
     private readonly tokens: TokenIssuer,
     private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: ConsumeMagicLinkCommand): Promise<ConsumeMagicLinkResult> {
@@ -88,7 +89,7 @@ export class ConsumeMagicLink implements UseCase<ConsumeMagicLinkCommand, Consum
       }
       // Un solo uso: consumir invalida el link.
       await this.magicLinks.markUsed(tokenHash);
-      await this.users.insertRefreshToken(session.refreshRow);
+      await this.refreshTokens.insertRefreshToken(session.refreshRow);
     });
 
     this.logger.info(LOG_EVENTS.MAGIC_LINK_CONSUMED, { userId });

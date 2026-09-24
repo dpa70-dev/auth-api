@@ -6,6 +6,7 @@ import { CreateGuestSession } from '../src/app/useCases/createGuestSession.js';
 import type { Logger, TokenIssuer } from '../src/domain/port/index.js';
 import { providerSchema, userKindSchema, userIdSchema } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
+import { DrizzleRefreshTokenRepository } from '../src/infra/db/drizzleRefreshTokenRepository.js';
 import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
 import { SqliteUnitOfWork } from '../src/infra/db/sqliteUnitOfWork.js';
 
@@ -15,6 +16,7 @@ describe('CreateGuestSession — US-15 cuenta anónima', () => {
   let sqlite: Database.Database;
   let db: BetterSQLite3Database;
   let users: DrizzleUserRepository;
+  let refreshTokens: DrizzleRefreshTokenRepository;
   let uow: SqliteUnitOfWork;
   const now = new Date('2026-01-01T00:00:00.000Z');
   const tokens: TokenIssuer = new JoseTokenService(new TextEncoder().encode('test-secret-para-guest-create-00'), 15);
@@ -25,6 +27,7 @@ describe('CreateGuestSession — US-15 cuenta anónima', () => {
     db = drizzle(sqlite);
     migrate(db, { migrationsFolder: './migrations' });
     users = new DrizzleUserRepository(db);
+    refreshTokens = new DrizzleRefreshTokenRepository(db);
     uow = new SqliteUnitOfWork(sqlite);
   });
 
@@ -32,7 +35,7 @@ describe('CreateGuestSession — US-15 cuenta anónima', () => {
     sqlite.close();
   });
 
-  const createGuestSession = () => new CreateGuestSession(users, tokens, uow, silentLogger);
+  const createGuestSession = () => new CreateGuestSession(users, tokens, uow, silentLogger, refreshTokens);
 
   it('crea guest con email null, kind guest y sin identidad', async () => {
     const result = await createGuestSession().execute({ refreshTtlDays: 30, now });
@@ -55,7 +58,7 @@ describe('CreateGuestSession — US-15 cuenta anónima', () => {
     expect(result.user.kind).toBe(userKindSchema.enum.guest);
     expect(result.user.createdAt).toBe(now.toISOString());
 
-    const refresh = await users.findByRefreshTokenHash(
+    const refresh = await refreshTokens.findByRefreshTokenHash(
       await tokens.hashRefreshToken(result.refreshToken),
     );
     expect(refresh).not.toBeNull();

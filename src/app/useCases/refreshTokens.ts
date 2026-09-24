@@ -1,6 +1,6 @@
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { Logger, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { Logger, TokenIssuer, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { isRefreshExpired } from '../../domain/refreshExpiry.js';
 import { refreshTokenStatusSchema } from '../../domain/vo/index.js';
@@ -20,7 +20,7 @@ export type RefreshTokensResult = {
 
 export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshTokensResult> {
   constructor(
-    private readonly users: UserRepository,
+    private readonly refreshTokens: RefreshTokenRepository,
     private readonly tokens: TokenIssuer,
     private readonly logger: Logger,
   ) {}
@@ -30,13 +30,13 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
 
     // US-03 AC-05: la BD guarda exclusivamente el hash SHA-256 del refresh opaco.
     const tokenHash = await this.tokens.hashRefreshToken(cmd.refreshToken);
-    const found = await this.users.findByRefreshTokenHash(tokenHash);
+    const found = await this.refreshTokens.findByRefreshTokenHash(tokenHash);
 
     // AC-04: inexistente, vencido o revocado → 401 genérico idéntico (nunca revelar la causa).
     if (!found) throw new ApiError(ErrorCodes.UNAUTHORIZED);
     if (found.status === refreshTokenStatusSchema.enum.revoked || found.status === refreshTokenStatusSchema.enum.used) {
       // REUSO (AC-03): el mismo refresh presentado dos veces → 401 idéntico Y revocar toda la familia.
-      await this.users.revokeFamily(found.familyId);
+      await this.refreshTokens.revokeFamily(found.familyId);
       this.logger.warn(LOG_EVENTS.REFRESH_REUSE_DETECTED, { familyId: found.familyId, jti: found.jti });
       throw new ApiError(ErrorCodes.UNAUTHORIZED);
     }
@@ -45,8 +45,8 @@ export class RefreshTokens implements UseCase<RefreshTokensCommand, RefreshToken
     }
 
     // AC-02 rotación: par NUEVO + invalidar el usado.
-    await this.users.markRefreshTokenUsed(tokenHash);
-    const session = await issueSession(this.tokens, this.users, {
+    await this.refreshTokens.markRefreshTokenUsed(tokenHash);
+    const session = await issueSession(this.tokens, this.refreshTokens, {
       userId: found.userId,
       familyId: found.familyId,
       provider: found.provider,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Logger, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
+import type { Logger, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { familyIdSchema, providerSchema, userIdSchema, userKindSchema, type Email, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
@@ -28,6 +28,7 @@ export class CreateGuestSession implements UseCase<CreateGuestSessionCommand, Cr
     private readonly tokens: TokenIssuer,
     private readonly unitOfWork: UnitOfWork,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: CreateGuestSessionCommand): Promise<CreateGuestSessionResult> {
@@ -56,7 +57,7 @@ export class CreateGuestSession implements UseCase<CreateGuestSessionCommand, Cr
         }),
         createdAt: now.toISOString(),
       });
-      await this.users.insertRefreshToken(session.refreshRow);
+      await this.refreshTokens.insertRefreshToken(session.refreshRow);
     });
 
     this.logger.info(LOG_EVENTS.GUEST_SESSION_CREATED, { userId: id });

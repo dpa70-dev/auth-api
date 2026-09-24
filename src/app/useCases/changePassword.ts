@@ -1,6 +1,6 @@
 import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
-import type { CompromisedPasswordChecker, Logger, PasswordHasher, UserRepository } from '../../domain/port/index.js';
+import type { CompromisedPasswordChecker, Logger, PasswordHasher, RefreshTokenRepository, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS, LOG_REASONS } from '../../domain/port/index.js';
 import type { PlainPassword, UserId } from '../../domain/vo/index.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -22,6 +22,7 @@ export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
     private readonly hasher: PasswordHasher,
     private readonly compromised: CompromisedPasswordChecker,
     private readonly logger: Logger,
+    private readonly refreshTokens: RefreshTokenRepository,
   ) {}
 
   async execute(cmd: ChangePasswordCommand): Promise<void> {
@@ -49,7 +50,7 @@ export class ChangePassword implements UseCase<ChangePasswordCommand, void> {
 
     const passwordHash = await this.hasher.hash(cmd.newPassword);
     await this.users.updatePasswordHash(user.id, passwordHash);
-    await this.users.revokeAllForUser(user.id);
+    await this.refreshTokens.revokeAllForUser(user.id);
 
     this.logger.info(LOG_EVENTS.PASSWORD_CHANGED, { userId: user.id });
   }

@@ -1,4 +1,4 @@
-import type { InsertRefreshToken, TokenIssuer, UserRepository } from '../../domain/port/index.js';
+import type { InsertRefreshToken, TokenIssuer, RefreshTokenRepository } from '../../domain/port/index.js';
 import type { FamilyId, Provider, UserId } from '../../domain/vo/index.js';
 import { refreshExpiresAt } from '../../domain/refreshExpiry.js';
 
@@ -47,10 +47,10 @@ export const generateSession = async (
 /** Emisión completa de una sesión (US-03 AC-02): generateSession + persistencia del refresh. Para use cases SIN tx propia. */
 export const issueSession = async (
   tokens: TokenIssuer,
-  users: UserRepository,
+  refreshTokens: RefreshTokenRepository,
   input: IssueSessionInput,
 ): Promise<{ accessToken: string; refreshToken: string }> => {
   const { accessToken, refreshToken, refreshRow } = await generateSession(tokens, input);
-  await users.insertRefreshToken(refreshRow);
+  await refreshTokens.insertRefreshToken(refreshRow);
   return { accessToken, refreshToken };
 };

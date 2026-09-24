@@ -3,13 +3,14 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { config as appConfig, type Config } from '../config.js';
-import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, OtpRepository, UnitOfWork } from '../domain/port/index.js';
+import type { CompromisedPasswordChecker, EmailSender, GoogleIdTokenVerifier, Logger, MagicLinkRepository, OtpRepository, RefreshTokenRepository, UnitOfWork } from '../domain/port/index.js';
 import { Argon2PasswordHasher } from './hashing/argon2PasswordHasher.js';
 import { CompositeCompromisedPasswordChecker } from './compromised/compositeCompromisedPasswordChecker.js';
 import { HibpCompromisedPasswordChecker } from './compromised/hibpCompromisedPasswordChecker.js';
 import { LocalCompromisedPasswordChecker } from './compromised/localCompromisedPasswordChecker.js';
 import { JoseTokenService } from './tokens/joseTokenService.js';
 import { DrizzleUserRepository } from './db/drizzleUserRepository.js';
+import { DrizzleRefreshTokenRepository } from './db/drizzleRefreshTokenRepository.js';
 import { DrizzleMagicLinkRepository } from './db/drizzleMagicLinkRepository.js';
 import { DrizzleOtpRepository } from './db/drizzleOtpRepository.js';
 import { ConsoleEmailSender } from './outbound/consoleEmailSender.js';
@@ -29,10 +30,12 @@ export type ComposeOverrides = {
   unitOfWork?: UnitOfWork;
   /** Fake del screen de filtraciones (tests) — por defecto HIBP real. */
   compromised?: CompromisedPasswordChecker;
+  refreshTokens?: RefreshTokenRepository;
 };
 
 export type InfraPorts = {
   users: UserRepository;
+  refreshTokens: RefreshTokenRepository;
   hasher: PasswordHasher;
   tokens: TokenIssuer;
   google: GoogleIdTokenVerifier | null;
@@ -71,6 +74,7 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
     );
   const tokens = new JoseTokenService(new TextEncoder().encode(cfg.jwtSecret), cfg.accessTtlMinutes);
   const users = new DrizzleUserRepository(db);
+  const refreshTokens = overrides.refreshTokens ?? new DrizzleRefreshTokenRepository(db);
   const magicLinks = overrides.magicLinks ?? new DrizzleMagicLinkRepository(db);
   const otpCodes = new DrizzleOtpRepository(db);
   const sender = overrides.sender ?? new ConsoleEmailSender(logger);
@@ -81,5 +85,5 @@ export const composeInfra = (overrides: ComposeOverrides = {}, cfg: Config = app
       : null;
   const unitOfWork = overrides.unitOfWork ?? new SqliteUnitOfWork(sqlite);
 
-  return { users, hasher, tokens, google, magicLinks, otpCodes, sender, compromised, unitOfWork, logger, close: () => sqlite.close() };
+  return { users, refreshTokens, hasher, tokens, google, magicLinks, otpCodes, sender, compromised, unitOfWork, logger, close: () => sqlite.close() };
 };
