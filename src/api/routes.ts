@@ -37,6 +37,7 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     guestUpgradeHandler,
     meHandler,
     setUserRoleHandler,
+    setUserModerationStatusHandler,
   } = buildHandlers(useCases, deps);
 
   // Rutas declaradas en UN solo lugar: el registro y el 405 derivan de la misma tabla (OCP/DRY).
@@ -62,6 +63,8 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     { method: 'get', path: API_PATHS.me, guards: [requireAuth(deps.tokens)], handler: meHandler },
     // rol de autorización: requireAuth primero (401 anónimo), luego requireRole('admin') (1 SELECT).
     { method: 'patch', path: API_PATHS.adminUserRole, guards: [requireAuth(deps.tokens), requireRole('admin', deps.users)], handler: setUserRoleHandler },
+    // estado de moderación: misma autorización admin que el rol; requireRole protege ambos ejes (doc 04).
+    { method: 'patch', path: API_PATHS.adminUserStatus, guards: [requireAuth(deps.tokens), requireRole('admin', deps.users)], handler: setUserModerationStatusHandler },
   ];
 
   const allowedMethods: Record<string, string[]> = {};

@@ -393,6 +393,33 @@ export interface paths {
         patch: operations["setUserRole"];
         trace?: never;
     };
+    "/admin/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Asignar el estado de moderación de un usuario (active → suspended/banned o viceversa)
+         * @description Eje de moderación (doc 04 → users.status): solo un **admin** puede suspender/banear/
+         *     reinstalar (403 `FORBIDDEN` si el actor no lo es). Transiciones libres: cualquier estado
+         *     → cualquier estado (el un-ban es una decisión administrativa legítima). Al pasar a
+         *     `suspended`/`banned` se revocan TODAS las sesiones del usuario objetivo (el access token
+         *     muere en su TTL corto y el refresh queda inútil); volver a `active` NO re-emite sesiones
+         *     (el usuario re-autentica). 403 `FORBIDDEN` genérico en los flujos de emisión (login/refresh)
+         *     para cuentas no activas, sin revelar el estado exacto (anti-enumeración). **200** con el
+         *     estado resultante.
+         */
+        patch: operations["setUserModerationStatus"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -551,6 +578,26 @@ export interface components {
         UserRole: "user" | "admin";
         SetUserRoleRequest: {
             role: components["schemas"]["UserRole"];
+        };
+        /**
+         * @description Estado de MODERACIÓN (eje independiente de kind y role — doc 04 → users.status): responde
+         *     a "¿qué puede hacer esta cuenta?" respecto a su estado. `active` = default de creación;
+         *     `suspended`/`banned` = asignados solo por un admin y bloquean la emisión de sesiones
+         *     (403 `FORBIDDEN` genérico en login/refresh, anti-enumeración) + revocan todas las sesiones
+         *     activas del usuario. Volver a `active` NO re-emite sesiones: el usuario re-autentica.
+         * @example active
+         * @enum {string}
+         */
+        UserStatus: "active" | "suspended" | "banned";
+        SetUserModerationStatusRequest: {
+            status: components["schemas"]["UserStatus"];
+        };
+        SetUserModerationStatusResponse: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                status: components["schemas"]["UserStatus"];
+            };
         };
         AuthResponse: {
             data: {
@@ -1209,6 +1256,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["UnauthorizedGeneric"];
+            403: components["responses"]["ForbiddenGeneric"];
+            /** @description El usuario objetivo no existe (`NOT_FOUND`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setUserModerationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID v4 del usuario objetivo (users.id). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetUserModerationStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Estado de moderación actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetUserModerationStatusResponse"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["UnauthorizedGeneric"];
