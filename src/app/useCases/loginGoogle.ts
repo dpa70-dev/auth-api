@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import { UniqueConstraintViolation } from '../../domain/uniqueConstraintViolation.js';
 import type { GoogleIdTokenVerifier, Logger, TokenIssuer, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
-import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, userIdSchema, providerSchema, userKindSchema, userRoleSchema, type Email, type Provider, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
 import { issueSession } from '../helpers/issueSession.js';
@@ -76,6 +76,7 @@ export class LoginGoogle implements UseCase<LoginGoogleCommand, LoginGoogleResul
           googleSub: claims.sub,
           emailVerified: true,
           kind: userKindSchema.enum.registered,
+          role: userRoleSchema.enum.user,
         }),
         createdAt: now.toISOString(),
       });

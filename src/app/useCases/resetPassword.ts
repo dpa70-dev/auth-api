@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { CompromisedPasswordChecker, Logger, MagicLinkRepository, PasswordHasher, RefreshTokenRepository, TokenIssuer, UnitOfWork, UserRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, userKindSchema, type PlainPassword } from '../../domain/vo/index.js';
+import { magicLinkPurposeSchema, magicLinkStatusSchema, userIdSchema, userKindSchema, userRoleSchema, type PlainPassword } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import type { UseCase } from '../interfaces/useCase.js';
 
@@ -83,6 +83,7 @@ export class ResetPassword implements UseCase<ResetPasswordCommand, void> {
             googleSub: null,
             emailVerified: true,
             kind: userKindSchema.enum.registered,
+            role: userRoleSchema.enum.user,
           }),
           createdAt: now.toISOString(),
         });

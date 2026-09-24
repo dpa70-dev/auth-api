@@ -11,12 +11,14 @@ import {
   timestampSchema,
   userIdSchema,
   userKindSchema,
+  userRoleSchema,
   type Email,
   type GoogleSub,
   type PasswordHash,
   type Timestamp,
   type UserId,
   type UserKind,
+  type UserRole,
 } from '../vo/index.js';
 import { z } from 'zod';
 
@@ -32,6 +34,7 @@ export type User = {
   readonly googleSub: GoogleSub | null;
   readonly emailVerified: boolean;
   readonly kind: UserKind;
+  readonly role: UserRole;
   readonly createdAt: Timestamp;
 };
 
@@ -45,6 +48,8 @@ export type NewUser = {
   readonly emailVerified: boolean;
   /** registered (default retrocompatible) · guest: anónima sin identidad (US-15) */
   readonly kind: UserKind;
+  /** user (default) · admin: eje de autorización (doc 04 → users.role) — se asigna solo por un admin. */
+  readonly role: UserRole;
 };
 
 export const newUserSchema = z
@@ -55,6 +60,7 @@ export const newUserSchema = z
     googleSub: googleSubSchema.nullable(),
     emailVerified: z.boolean(),
     kind: userKindSchema.default('registered'),
+    role: userRoleSchema.default('user'),
   })
   .refine(
     (u) => {

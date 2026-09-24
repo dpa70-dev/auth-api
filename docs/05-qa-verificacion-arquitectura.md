@@ -235,3 +235,39 @@ Implementación completa del flujo guest (US-15/US-16) siguiendo el plan aprobad
 - Drift del contrato (T8: `email` nullable + `kind` en User) resuelto en los 6 use cases que emiten sesiones: resultados con `email: Email | null` + `kind` (`'registered'` en login/register/otp/magic, `UserKind` en google); `getMe` devuelve `user.kind`. Todos los handlers vuelven a tipar contra `AuthResponseData`/`UserProfileData` (sin `as any`).
 
 **Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **165/165** en 19 archivos (154 previos + 11 nuevos en `test/guest.test.ts`: creación/me/refresh/upgrade/409s/401/422/429) ✓ · `build` ✓ · smoke curl guest→me→upgrade→me OK ✓ · merge `feat/guest-user` a main `--no-ff` ✓. *(Estado vigente del repo al 19-sep-2026.)*
+
+---
+
+## §18 — `feat/user-roles` (US-17): eje de autorización `users.role`
+
+**Decisión (23-sep-2026)**: el rol viaja en **DB, no en el token** — el access JWT no
+lleva `role`; `requireRole` hace **1 SELECT** por request (`findById`) al construir la
+guards. Revocación inmediata: degradar a un admin surte efecto en el siguiente request.
+
+**Cambios**:
+- **Contrato** (`docs/03-openapi.yaml` + `src/api/contract.ts` regenerado):
+  - `PATCH /admin/users/{id}/role` con body `SetUserRoleRequest` (`{ role: 'user' | 'admin' }`) →
+    **204 sin cuerpo** (éxito), `400/401/403/404/422/500` (errores).
+  - `ForbiddenGeneric` (403) añadido; `FORBIDDEN` entra en el enum `Error.code`.
+- **Dominio**: VO `UserRole` (`userRoleValues`, zod enum) en `domain/vo/userRole.ts`;
+  `User.role`/`NewUser.role` en la entidad (`newUserSchema` con `default('user')`);
+  puerto `UserRepository.setRole(userId, role)`.
+- **DB**: `users.role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin'))`
+  (migración `0007_user_roles.sql` — table-rebuild del patrón 0006, rows → default
+  `'user'`). Nacimiento de usuario: todos los flujos (`registerUser`, `CreateGuestSession`,
+  alta implícita OTP/magic/Google) crean `role: 'user'` explícito — **ningún flujo público
+  crea admins** (auto-rol prohibido en `SetUserRole`: actor === target → 403).
+- **App**: `SetUserRole` (use case): actor inexistente → `UNAUTHORIZED` (defensivo),
+  `actor.role !== 'admin'` → `FORBIDDEN`, auto-rol → `FORBIDDEN`, target inexistente →
+  `NOT_FOUND`; loguea `LOG_EVENTS.USER_ROLE_CHANGED`.
+- **API**: `requireRole(role, users)` (composición con `requireAuth` — asume `req.userId`,
+  sin re-parsear el token); handler `setUserRoleHandler` (`userIdSchema.parse` de params →
+  422, `writeSuccess(res, 204, null)`); ruta `PATCH` registrada con guards
+  `[requireAuth, requireRole('admin')]`; **`RouteDeclaration.method` ahora admite
+  `'patch'`** (era `'get' | 'post'`). `ApiDeps = { tokens, users, config }` (repo de
+  users inyectado explícitamente; los tests usan `buildApp(overrides)`, sin rotura de call-sites).
+
+**Verificación**: `typecheck` ✓ · `lint` ✓ · `vitest` **182/182** en 22 archivos
+(165 previos + 17 nuevos: `userRole.test.ts` 6 + `setUserRole.test.ts` 6 +
+`adminRole.test.ts` 5) ✓ · `contract` regenerado ✓ · merge `feat/user-roles` a main
+`--no-ff` ✓. *(Estado vigente del repo al 23-sep-2026.)*

@@ -17,6 +17,7 @@ export const ERROR_CATALOG = [
   { code: 'OTP_INVALID', message: 'Código de acceso inválido o expirado.' },
   { code: 'RATE_LIMITED', message: 'Demasiados intentos. Reintentá más tarde.' },
   { code: 'UNAUTHORIZED', message: 'No autenticado.' },
+  { code: 'FORBIDDEN', message: 'No autorizado para esta acción.' },
   { code: 'MALFORMED_REQUEST', message: 'El cuerpo de la petición es inválido o excede el tamaño permitido.' },
   { code: 'NOT_FOUND', message: 'Recurso no encontrado.' },
   { code: 'METHOD_NOT_ALLOWED', message: 'Método no permitido.' },

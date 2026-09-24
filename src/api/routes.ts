@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { ERROR_KIND_METHOD_NOT_ALLOWED } from './protocol/errorKinds.js';
 import { requireAuth } from './middlewares/authMiddleware.js';
+import { requireRole } from './middlewares/requireRole.js';
 import { authLimiter } from './middlewares/rateLimiters.js';
 import type { UseCases } from '../app/buildUseCases.js';
 import { buildHandlers } from './buildHandlers.js';
@@ -10,7 +11,7 @@ import { API_PATHS } from './paths.js';
 
 /** Declaración de una ruta: ÚNICA fuente de verdad de método+path (registro y 405 derivan de aquí). */
 type RouteDeclaration = {
-  method: 'get' | 'post';
+  method: 'get' | 'post' | 'patch';
   path: string;
   /** Guardas en orden de ejecución, antes del handler (p. ej. [authLimiter, requireAuth]). */
   guards: RequestHandler[];
@@ -35,6 +36,7 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     guestHandler,
     guestUpgradeHandler,
     meHandler,
+    setUserRoleHandler,
   } = buildHandlers(useCases, deps);
 
   // Rutas declaradas en UN solo lugar: el registro y el 405 derivan de la misma tabla (OCP/DRY).
@@ -58,6 +60,8 @@ export const apiRouter = (useCases: UseCases, deps: ApiDeps): Router => {
     // US-16: reclama identidad sobre la sesión guest → requireAuth (debe estar autenticado) + throttle.
     { method: 'post', path: API_PATHS.guestUpgrade, guards: [requireAuth(deps.tokens), authLimiter(deps.config)], handler: guestUpgradeHandler },
     { method: 'get', path: API_PATHS.me, guards: [requireAuth(deps.tokens)], handler: meHandler },
+    // rol de autorización: requireAuth primero (401 anónimo), luego requireRole('admin') (1 SELECT).
+    { method: 'patch', path: API_PATHS.adminUserRole, guards: [requireAuth(deps.tokens), requireRole('admin', deps.users)], handler: setUserRoleHandler },
   ];
 
   const allowedMethods: Record<string, string[]> = {};

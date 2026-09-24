@@ -50,6 +50,13 @@
       "when": 1790088047833,
       "tag": "0006_fair_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790164000000,
+      "tag": "0007_user_roles",
+      "breakpoints": true
     }
   ]
 }

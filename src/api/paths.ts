@@ -18,4 +18,5 @@ export const API_PATHS = {
   guest: '/auth/guest',
   guestUpgrade: '/auth/guest/upgrade',
   me: '/auth/me',
+  adminUserRole: '/admin/users/:id/role',
 } as const;

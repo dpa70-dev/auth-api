@@ -3,7 +3,7 @@ import { ApiError } from '../../domain/apiError.js';
 import { ErrorCodes } from '../../domain/errorCatalog.js';
 import type { Logger, OtpRepository, PasswordHasher, TokenIssuer, UnitOfWork, UserRepository, RefreshTokenRepository } from '../../domain/port/index.js';
 import { LOG_EVENTS } from '../../domain/port/index.js';
-import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
+import { familyIdSchema, otpStatusSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type OtpCode, type UserId } from '../../domain/vo/index.js';
 import { validateNewUser } from '../../domain/entity/user.js';
 import { generateSession } from '../helpers/issueSession.js';
 import type { UseCase } from '../interfaces/useCase.js';
@@ -92,6 +92,7 @@ export class VerifyOtp implements UseCase<VerifyOtpCommand, VerifyOtpResult> {
             googleSub: null,
             emailVerified: true,
             kind: userKindSchema.enum.registered,
+            role: userRoleSchema.enum.user,
           }),
           createdAt: now.toISOString(),
         });

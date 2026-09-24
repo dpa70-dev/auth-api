@@ -5,6 +5,7 @@ import { buildMagicLinkHandlers } from './handlers/magicLinkHandlers.js';
 import { buildOtpHandlers } from './handlers/otpHandlers.js';
 import { buildMeHandler } from './handlers/meHandler.js';
 import { buildGuestHandlers } from './handlers/guestHandlers.js';
+import { buildAdminHandlers } from './handlers/adminHandlers.js';
 import type { ApiDeps } from './deps.js';
 
 /** Handlers de la frontera HTTP, enrutados por routes.ts (rutas declarativas sin lógica inline). */
@@ -23,6 +24,7 @@ export type Handlers = {
   guestHandler: RequestHandler;
   guestUpgradeHandler: RequestHandler;
   meHandler: RequestHandler;
+  setUserRoleHandler: RequestHandler;
 };
 
 /** Construye los handlers a partir de los casos de uso y las dependencias de la frontera. */
@@ -32,4 +34,5 @@ export const buildHandlers = (useCases: UseCases, deps: ApiDeps): Handlers => ({
   ...buildOtpHandlers(useCases, deps),
   ...buildGuestHandlers(useCases, deps),
   ...buildMeHandler(useCases),
+  ...buildAdminHandlers(useCases),
 });
