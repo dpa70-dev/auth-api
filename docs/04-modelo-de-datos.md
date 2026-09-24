@@ -1,6 +1,6 @@
 # 04 · Modelo de Datos — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento. **Ampliado (19-sep-2026)**: tabla `otp_codes` para el acceso por código OTP (US-13/14) + `provider 'otp'` en la CHECK de `refresh_tokens` — migración `0004_premium_warbound.sql` (+ su UK e índices en el mismo snapshot), verificada contra las decisiones 6, 9-11 de este documento. **Ampliado (23-sep-2026)**: columna `users.role` para el eje de autorización (user/admin) — migración `0007_user_roles.sql` (rebuild por table-rebuild del patrón 0006), verificada contra la regla de §3 `users.kind` (el rol es un eje independiente de la identidad).
+**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento. **Ampliado (19-sep-2026)**: tabla `otp_codes` para el acceso por código OTP (US-13/14) + `provider 'otp'` en la CHECK de `refresh_tokens` — migración `0004_premium_warbound.sql` (+ su UK e índices en el mismo snapshot), verificada contra las decisiones 6, 9-11 de este documento. **Ampliado (23-sep-2026)**: columna `users.role` para el eje de autorización (user/admin) — migración `0007_user_roles.sql` (rebuild por table-rebuild del patrón 0006), verificada contra la regla de §3 `users.kind` (el rol es un eje independiente de la identidad). **Ampliado (23-sep-2026)**: columna `users.status` para el eje de moderación (active/suspended/banned) — migración `0008_user_moderation_status.sql` (table-rebuild del patrón 0007), verificada contra las reglas de §3 `users.kind` y `users.role` (el estado es un eje independiente de identidad y permisos).
 **Fuente**: doc 00 → ítems 15 (timestamps), 30-33 (SQLite/Drizzle/migraciones), 35 (argon2id), 38 (refresh hasheado + jti), 42 (logout), 44-47 (Google OIDC, `users` nullable); historias US-01, US-03, US-04, US-07, US-08; diagramas 3-4 del doc 02.
 **Cómo leer**: cada tabla traza columna a columna su origen en la sección [Trazabilidad](#trazabilidad-columna--fuente). Las decisiones que el modelo toma más allá de la literalidad del plan están explicadas en [Decisiones derivadas](#decisiones-derivadas).
 
@@ -20,6 +20,9 @@ erDiagram
         text password_hash "argon2id · NULL si solo-Google/solo-magic"
         text google_sub UK "NULL si solo-local"
         int email_verified "0 · 1 (Google y vía magic link)"
+        text kind "registered · guest"
+        text role "user · admin"
+        text status "active · suspended · banned"
         text created_at "ISO 8601 UTC"
     }
 
@@ -69,6 +72,7 @@ CREATE TABLE users (
   email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1)),
   kind           TEXT NOT NULL DEFAULT 'registered' CHECK (kind IN ('registered','guest')), -- tipo de cuenta: identidad vs anónima (VOs: UserKind)
   role           TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')), -- rol de autorización (VOs: UserRole)
+  status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','banned')), -- estado de moderación (VOs: UserStatus)
   created_at     TEXT NOT NULL,                                   -- ISO 8601 UTC
   -- espejo del refine de newUserSchema (dominio = fuente de verdad): guest sin identidad es la
   -- única excepción; cualquier otro kind exige email + al menos una identidad (local/Google,
@@ -146,6 +150,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `email_verified` | US-07 AC-02 (`email_verified = 1`) y AC-04 (server confía en el email solo si `true`); diagrama 1 (registro local → `false`) |
 | `kind` | US-15/US-16 (eje identidad: `'registered'` vs `'guest'`); `DEFAULT 'registered'` retrocompatible (migración 0005 copia filas y el default llena la columna); NO es rol ni estado de moderación |
 | `role` | Eje autorización (US-17): `'user'` (default, todo usuario nace así) vs `'admin'` (único rol con permisos de administración); `DEFAULT 'user'` retrocompatible (migración 0007 table-rebuild — las filas copiadas sin valor heredan el default); lo muta solo `PATCH /admin/users/{id}/role` (cambio `'user'` ↔ `'admin'`); NO es identidad ni estado de moderación |
+| `status` | Eje moderación (plan 3: US-18/19/20): `'active'` (default) vs `'suspended'`/`'banned'`; `DEFAULT 'active'` retrocompatible (migración 0008 table-rebuild — las filas copiadas sin valor heredan el default); lo muta solo `PATCH /admin/users/{id}/status`; NO es identidad (kind) ni permisos (role) |
 | `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD); US-01 AC-02 (`createdAt` en la respuesta) |
 | CHECK ≥ 1 identidad | doc 00 → nº 45 (modelo `users` nullable: «pass nullable si Google y google_sub nullable si local»); US-07 AC-02 (alta implícita sin password). **Ampliado en US-15**: `OR kind = 'guest'` — el guest es la única cuenta que puede existir sin identidad |
 
@@ -197,7 +202,41 @@ en la API?". **NO es identidad (`kind`) ni estado de moderación.**
 - **Regla de diseño (no violar)**: `role` es el eje PERMISOS. No se consulta en la
   firma de tokens (el rol viaja en DB y se lee por request — revocación inmediata),
   no se auto-asigna admin por ningún flujo público, y los estados de moderación
-  (plan 3: suspended/banned) serán un eje independiente, sin mezclarse con `role`.
+  (`users.status`: active/suspended/banned, plan 3) son un eje independiente,
+  sin mezclarse con `role` — ver bloque siguiente.
+
+### `users.status` — estado de moderación (eje moderación)
+
+`status` es un discriminador de MODERACIÓN: responde a "¿puede esta cuenta usar la
+API?". **NO es identidad (`kind`) ni permisos (`role`).**
+
+| Valor | Significado |
+|---|---|
+| `'active'` | Estado por defecto de toda cuenta al nacer (cualquier `kind`, `role` y proveedor). Flujos de emisión de sesión normales (login, refresh, OTP, magic link, Google) funcionan sin restricción. |
+| `'suspended'` | Cuenta bloqueada temporalmente. Todo flujo de emisión de sesión que la resuelva responde **403 FORBIDDEN** (genérico, anti-enumeración). Las sesiones activas se **revocan** al suspender. |
+| `'banned'` | Cuenta bloqueada definitivamente. Mismo comportamiento que `suspended` (403 en emisión + revocación de sesiones); la distinción es política (permite ban permanente sin borrar la fila). |
+
+- Columna `status` TEXT NOT NULL DEFAULT 'active' → retrocompatible: los usuarios
+  preexistentes quedan `'active'` sin migración de datos (0008 copia filas, el default
+  llena la columna nueva).
+- `CHECK status IN ('active','suspended','banned')` derivado del VO `userStatusValues`
+  (fuente única).
+- Uso: **solo** `PATCH /admin/users/{id}/status` (`SetUserModerationStatus` — require
+  auth + requireRole('admin'); retorna `200 { data: { id, status } }`). Ningún flujo
+  público de creación ni de emisión de sesiones toca `status` — los usuarios nacen
+  `'active'`.
+- Transiciones: libres entre los 3 valores (suspender → banear, un-ban → active, etc.).
+- **Efecto lateral**: al pasar a `suspended`/`banned` se revocan **todas** las sesiones
+  del usuario (`revokeAllForUser`) — el bloqueo es inmediato aunque el usuario posea un
+  refresh. Volver a `active` **NO** re-emite sesiones (el usuario re-autentica; no se
+  puede "resucitar" una sesión previa).
+- **Guards de emisión**: cualquier flujo que resuelve un usuario existente y emite
+  sesión (login, loginGoogle, refreshTokens, consumeMagicLink, verifyOtp) rechaza con
+  `403 FORBIDDEN` si `user.status !== 'active'` — **genérico** (no `ACCOUNT_SUSPENDED`),
+  para no filtrar por qué crédito de moderación aplica (anti-enumeración).
+- **Regla de diseño (no violar)**: `status` es el eje MODERACIÓN. No se mezcla con
+  `kind` (identidad) ni `role` (permisos). No se consulta en la firma de tokens (viaja
+  solo en DB), y ningún flujo de creación lo setea distinto de `active`.
 
 ### `refresh_tokens`
 
@@ -254,6 +293,7 @@ en la API?". **NO es identidad (`kind`) ni estado de moderación.**
 | 10 | **`otp_codes.attempts`** (`INTEGER NOT NULL DEFAULT 0`) como contador de fallos | El límite de 5 intentos (US-14 AC-03) necesita persistencia para sobrevivir reinicios del server (a diferencia del rate limit de red, doc 00 → nº 41); la revocación al llegar al límite fuerza un nuevo request (rotación) |
 | 11 | **`otp_codes` SIN FK a `users`** | El código existe para un email, registrado o no (anti-enumeración US-13 AC-01 + auto-cuenta US-14 AC-04): una FK exigiría el usuario y rompería el flujo de alta implícita. El email es el ancla, como en `magic_links` |
 | 12 | **`users.email` nullable + `users.kind` (US-15/16)** | El guest (US-15) es una cuenta **sin identidad**: `email` NULL vía table-rebuild (0005), `kind` como discriminador de tipo de cuenta (`'registered'`/`'guest'`, DEFAULT `'registered'` retrocompatible — las filas preexistentes quedan registradas sin migración de datos). CHECK identidad ampliado con `OR kind = 'guest'`. **`kind` NO es rol ni estado** (regla de diseño: ejes independientes, ver bloque `users.kind` arriba). El upgrade (US-16) reclama email+password → `kind = 'registered'`, sin revocar sesiones |
+| 13 | **`users.status`** (eje moderación, US-18/19/20) | Un único enum (`active`/`suspended`/`banned`) con `DEFAULT 'active'` retrocompatible (migración 0008 table-rebuild — las filas copiadas heredan el default) y `CHECK` derivado del VO `userStatusValues`. Es un eje independiente de `kind` (identidad) y `role` (permisos): **no** se absorbe en ninguno de los otros dos. Lo muta solo un endpoint admin (`PATCH /admin/users/{id}/status`, guard `requireRole('admin')`); al pasar a `suspended`/`banned` se revoca toda la sesión del usuario (`revokeAllForUser` — bloqueo inmediato) y los flujos de emisión que resuelven un usuario no-`active` responden **403 FORBIDDEN** genérico (anti-enumeración: no revela qué crédito de moderación aplica) |
 
 ---
 
@@ -274,5 +314,5 @@ en la API?". **NO es identidad (`kind`) ni estado de moderación.**
 
 - Drizzle define el mismo esquema 1:1 (doc 00 → nº 30-33); `better-sqlite3` con `foreign_keys = ON` y WAL.
 - Tipos nativos: `TEXT` para UUID/ISO-8601/JTI y `INTEGER` para `email_verified` (SQLite no distingue más; los VOs del dominio (doc 02 → diagrama 6) validan la semántica en la frontera).
-- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email` (nullable en guest), `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `UserKind → users.kind`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`, `MagicLinkPurpose → magic_links.purpose`, `OtpCode → otp_codes.code_hash` (solo hash; el código claro nunca se persiste), `OtpStatus → otp_codes.status`.
+- Los VOs mapean a columnas: `UserId → users.id`, `Email → users.email` (nullable en guest), `PasswordHash → users.password_hash`, `GoogleSub → users.google_sub`, `EmailVerified → users.email_verified`, `UserKind → users.kind`, `UserRole → users.role`, `UserStatus → users.status`, `Jti → refresh_tokens.jti`, `Provider → refresh_tokens.provider`, `MagicLinkStatus → magic_links.status`, `MagicLinkPurpose → magic_links.purpose`, `OtpCode → otp_codes.code_hash` (solo hash; el código claro nunca se persiste), `OtpStatus → otp_codes.status`.
 - Índices: cobertura de las búsquedas de los diagramas (búsqueda por email, por google_sub, por refresh token_hash y por magic token_hash — únicos ya indexados; por user_id, family_id, magic email y magic status en índices separados; por otp email y otp status en índices separados).
