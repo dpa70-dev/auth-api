@@ -18,6 +18,7 @@ import {
   refreshTokenStatusSchema,
   refreshTokenStatusValues,
   userKindValues,
+  userRoleValues,
 } from '../domain/vo/index.js';
 
 /**
@@ -46,6 +47,9 @@ export const users = sqliteTable(
     // kind: tipo de cuenta (eje identidad, NO rol — doc 04 → users.kind). DEFAULT 'registered'
     // hace retrocompatible la migración: todas las filas preexistentes quedan registered.
     kind: text('kind', { enum: userKindValues }).notNull().default('registered'),
+    // role: rol de autorización (doc 04 → users.role), eje independiente de kind. DEFAULT 'user'
+    // retrocompatible: toda fila preexistente queda user; solo un admin promueve.
+    role: text('role', { enum: userRoleValues }).notNull().default('user'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [
@@ -62,6 +66,8 @@ export const users = sqliteTable(
     ),
     // doc 04 → users.kind: CHECK derivado de userKindValues (fuente única)
     check('users_kind_check', sql`${t.kind} IN (${inList(userKindValues)})`),
+    // doc 04 → users.role: CHECK derivado de userRoleValues (fuente única)
+    check('users_role_check', sql`${t.role} IN (${inList(userRoleValues)})`),
   ],
 );
 

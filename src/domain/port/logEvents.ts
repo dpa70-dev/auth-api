@@ -32,6 +32,7 @@ export const LOG_EVENTS = {
   PASSWORD_BREACH_CHECK_FALLBACK: 'password_breach_check_fallback',
   GUEST_SESSION_CREATED: 'guest_session_created',
   GUEST_UPGRADED: 'guest_upgraded',
+  USER_ROLE_CHANGED: 'user_role_changed',
 } as const;
 
 /** Unión de eventos válidos: el puerto solo admite estos — compilar = no hay typos. */

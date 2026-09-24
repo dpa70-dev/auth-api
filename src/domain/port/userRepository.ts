@@ -12,6 +12,7 @@
  * [REFACTOR 2025-09-23] Extraído RefreshTokenRepository (puerto + adaptador) — userRepository.ts ahora solo gestiona usuario.
  */
 import type { Email, GoogleSub, PasswordHash, Timestamp, UserId } from '../vo/index.js';
+import type { UserRole } from '../vo/index.js';
 import type { NewUser, User } from '../entity/user.js';
 
 /**
@@ -38,4 +39,9 @@ export interface UserRepository {
    * Lanza Error si el email viola la unicidad de users.email (otra cuenta ya lo usa).
    */
   upgradeGuestToRegistered(userId: UserId, email: Email, passwordHash: PasswordHash): Promise<void>;
+  /**
+   * Eje de autorización (doc 04 → users.role): SET role. Solo el use case SetUserRole lo llama
+   * (verifica actor admin y prohíbe auto-rol); el repo no sabe de políticas.
+   */
+  setRole(userId: UserId, role: UserRole): Promise<void>;
 }
