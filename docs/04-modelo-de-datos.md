@@ -1,6 +1,6 @@
 # 04 · Modelo de Datos — API Signup/Login
 
-**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento. **Ampliado (19-sep-2026)**: tabla `otp_codes` para el acceso por código OTP (US-13/14) + `provider 'otp'` en la CHECK de `refresh_tokens` — migración `0004_premium_warbound.sql` (+ su UK e índices en el mismo snapshot), verificada contra las decisiones 6, 9-11 de este documento.
+**Estado**: Fase 2 de Spec Driven Development — modelo de datos **derivado** del contrato OpenAPI (`03-openapi.yaml`), de los flujos auditados (`02-flujos-registro-autenticacion.md`) y de las consideraciones (`00-consideraciones-tecnicas.md`). **Referencia de implementación — fase 3 completada (29-ago-2026)**: esquema Drizzle 1:1 en `src/db/schema.ts` + migración `migrations/0000_rare_blue_marvel.sql`, verificado contra este documento (CHECKs y FKs incluidas). **Ampliado (5-sep-2026)**: `magic_links.purpose` para la recuperación de contraseña (US-12) — migración `0002_busy_avengers.sql`, verificada contra este documento. **Actualizado (11-sep-2026)**: `family_id` pasa a UUID de sesión (una familia por login) y se elimina su FK a `users` — migración `0003_cloudy_lucky_pierre.sql`, verificada contra la decisión 2 de este documento. **Ampliado (19-sep-2026)**: tabla `otp_codes` para el acceso por código OTP (US-13/14) + `provider 'otp'` en la CHECK de `refresh_tokens` — migración `0004_premium_warbound.sql` (+ su UK e índices en el mismo snapshot), verificada contra las decisiones 6, 9-11 de este documento. **Ampliado (23-sep-2026)**: columna `users.role` para el eje de autorización (user/admin) — migración `0007_user_roles.sql` (rebuild por table-rebuild del patrón 0006), verificada contra la regla de §3 `users.kind` (el rol es un eje independiente de la identidad).
 **Fuente**: doc 00 → ítems 15 (timestamps), 30-33 (SQLite/Drizzle/migraciones), 35 (argon2id), 38 (refresh hasheado + jti), 42 (logout), 44-47 (Google OIDC, `users` nullable); historias US-01, US-03, US-04, US-07, US-08; diagramas 3-4 del doc 02.
 **Cómo leer**: cada tabla traza columna a columna su origen en la sección [Trazabilidad](#trazabilidad-columna--fuente). Las decisiones que el modelo toma más allá de la literalidad del plan están explicadas en [Decisiones derivadas](#decisiones-derivadas).
 
@@ -68,6 +68,7 @@ CREATE TABLE users (
   google_sub     TEXT UNIQUE,                                     -- sub de Google (VOs: GoogleSub)
   email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1)),
   kind           TEXT NOT NULL DEFAULT 'registered' CHECK (kind IN ('registered','guest')), -- tipo de cuenta: identidad vs anónima (VOs: UserKind)
+  role           TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')), -- rol de autorización (VOs: UserRole)
   created_at     TEXT NOT NULL,                                   -- ISO 8601 UTC
   -- espejo del refine de newUserSchema (dominio = fuente de verdad): guest sin identidad es la
   -- única excepción; cualquier otro kind exige email + al menos una identidad (local/Google,
@@ -144,6 +145,7 @@ Correspondencia con el diagrama 3 del doc 02 (búsqueda y estados):
 | `google_sub` | doc 00 → nº 45 (`google_sub` nullable); US-07 AC-02; US-08 AC-01/AC-02 (colisión). **UNIQUE deriva** de la necesidad de `findByGoogleSub(sub)` sin ambigüedad (diagrama 5) |
 | `email_verified` | US-07 AC-02 (`email_verified = 1`) y AC-04 (server confía en el email solo si `true`); diagrama 1 (registro local → `false`) |
 | `kind` | US-15/US-16 (eje identidad: `'registered'` vs `'guest'`); `DEFAULT 'registered'` retrocompatible (migración 0005 copia filas y el default llena la columna); NO es rol ni estado de moderación |
+| `role` | Eje autorización (US-17): `'user'` (default, todo usuario nace así) vs `'admin'` (único rol con permisos de administración); `DEFAULT 'user'` retrocompatible (migración 0007 table-rebuild — las filas copiadas sin valor heredan el default); lo muta solo `PATCH /admin/users/{id}/role` (cambio `'user'` ↔ `'admin'`); NO es identidad ni estado de moderación |
 | `created_at` | doc 00 → nº 15 (timestamps ISO 8601 en BD); US-01 AC-02 (`createdAt` en la respuesta) |
 | CHECK ≥ 1 identidad | doc 00 → nº 45 (modelo `users` nullable: «pass nullable si Google y google_sub nullable si local»); US-07 AC-02 (alta implícita sin password). **Ampliado en US-15**: `OR kind = 'guest'` — el guest es la única cuenta que puede existir sin identidad |
 
@@ -167,10 +169,35 @@ cuenta con una identidad real?". **NO es un rol ni un estado.**
 - Uso: creación de guest en `POST /auth/guest`, conmutación a `'registered'` en
   `POST /auth/guest/upgrade`, e informativo en el payload `user.kind` (AuthResponse y `/auth/me`).
 - **Regla de diseño (no violar)**: `kind` es el eje IDENTIDAD. Roles/autorización
-  (columna `role` futura: user/admin/...) y estados de moderación (active/suspended/...)
+  (columna `role`: user/admin) y estados de moderación (active/suspended/...)
   son ejes independientes; `kind` NO debe absorberlos (sin kitchen-sink — SRP, doc 05).
   Si un futuro requisito necesita autorización por tipo de cuenta, se consulta `kind`
   (p. ej. guard `requireRegistered`), pero no se añaden valores ajenos al enum.
+  `role` sigue la misma regla: la autorización consulta `role` (guard `requireRole('admin', ...)`),
+  nunca `kind` ni un futuro `status`.
+
+### `users.role` — rol de autorización (eje permisos)
+
+`role` es un discriminador de PERMISOS: responde a "¿qué puede hacer esta cuenta
+en la API?". **NO es identidad (`kind`) ni estado de moderación.**
+
+| Valor | Significado |
+|---|---|
+| `'user'` | Rol por defecto de toda cuenta al nacer (cualquier `kind` y cualquier proveedor). Sin permisos de administración. |
+| `'admin'` | Rol con permisos de administración: hoy solo `PATCH /admin/users/{id}/role` (guard `requireRole('admin')`), extensible a más rutas `/admin/*`. |
+
+- Columna `role` TEXT NOT NULL DEFAULT 'user' → retrocompatible: los usuarios
+  preexistentes quedan `'user'` sin migración de datos (0007 copia filas, el default
+  llena la columna nueva).
+- `CHECK role IN ('user','admin')` derivado del VO `userRoleValues` (fuente única).
+- Uso: creación de usuarios (todos nacen `'user'` — ni `registerUser`, ni
+  `createGuestSession`, ni alta implícita OTP/magic/Google crean admins), y
+  `PATCH /admin/users/{id}/role` (`SetUserRole` — require auth + requireRole('admin'),
+  prohibido auto-rol, 204 vacío).
+- **Regla de diseño (no violar)**: `role` es el eje PERMISOS. No se consulta en la
+  firma de tokens (el rol viaja en DB y se lee por request — revocación inmediata),
+  no se auto-asigna admin por ningún flujo público, y los estados de moderación
+  (plan 3: suspended/banned) serán un eje independiente, sin mezclarse con `role`.
 
 ### `refresh_tokens`
 
