@@ -11,6 +11,7 @@ import {
   userIdSchema,
   userKindSchema,
   userRoleSchema,
+  userStatusSchema,
   type Email,
   type PasswordHash,
   type PlainPassword,
@@ -95,6 +96,7 @@ describe('RequestOtp — US-13 solicitud de código OTP', () => {
       emailVerified: false,
       kind: userKindSchema.enum.registered,
       role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: now.toISOString(),
     });
 

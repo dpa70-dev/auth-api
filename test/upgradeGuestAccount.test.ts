@@ -14,6 +14,7 @@ import {
   userIdSchema,
   userKindSchema,
   userRoleSchema,
+  userStatusSchema,
   type Email,
   type PasswordHash,
   type PlainPassword,
@@ -71,6 +72,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
       emailVerified: false,
       kind: userKindSchema.enum.guest,
       role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     return id;
@@ -130,6 +132,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
       emailVerified: false,
       kind: userKindSchema.enum.registered,
       role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: '2025-01-01T00:00:00.000Z',
     });
 
@@ -148,6 +151,7 @@ describe('UpgradeGuestAccount — US-16 reclamo de identidad de cuenta guest', (
       emailVerified: false,
       kind: userKindSchema.enum.registered,
       role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
       createdAt: '2025-01-01T00:00:00.000Z',
     });
     const guestId = await insertGuest();

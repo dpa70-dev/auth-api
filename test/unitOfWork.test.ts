@@ -5,7 +5,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { RegisterUser } from '../src/app/useCases/registerUser.js';
 import type { CompromisedPasswordChecker, Logger, PasswordHasher, TokenIssuer } from '../src/domain/port/index.js';
-import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
+import { emailSchema, familyIdSchema, jtiSchema, providerSchema, userIdSchema, userKindSchema, userRoleSchema, userStatusSchema, type Email, type PasswordHash, type PlainPassword } from '../src/domain/vo/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
 import { DrizzleRefreshTokenRepository } from '../src/infra/db/drizzleRefreshTokenRepository.js';
 import { JoseTokenService } from '../src/infra/tokens/joseTokenService.js';
@@ -56,6 +56,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
         emailVerified: false,
         kind: userKindSchema.enum.registered,
         role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
         createdAt: now(),
       });
       await refreshTokens.insertRefreshToken({
@@ -86,6 +87,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
           emailVerified: false,
           kind: userKindSchema.enum.registered,
           role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
           createdAt: now(),
         });
         // Segunda escritura falla (email duplicado → UniqueConstraintViolation en el repo).
@@ -97,6 +99,7 @@ describe('SqliteUnitOfWork — commit/rollback (doc 13 → §13.1)', () => {
           emailVerified: false,
           kind: userKindSchema.enum.registered,
           role: userRoleSchema.enum.user,
+      status: userStatusSchema.enum.active,
           createdAt: now(),
         });
       }),
