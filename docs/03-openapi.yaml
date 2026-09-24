@@ -806,6 +806,59 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /admin/users/{id}/role:
+    patch:
+      tags: [Admin]
+      operationId: setUserRole
+      summary: Asignar el rol de autorización de un usuario (user → admin o viceversa)
+      description: |
+        Eje de autorización (doc 04 → users.role): solo un **admin** puede promover/degradar (403
+        `FORBIDDEN` si el actor no lo es). El actor NO puede modificarse a sí mismo (`actorId === id`
+        → 403 `FORBIDDEN`, evita que el último admin se degrade y deje el sistema sin admins).
+        No hay límite de grado/transiciones: user↔admin libre. **204** sin cuerpo. El rol NO se
+        embebe en el JWT (1 SELECT por request, decisión planificada): el cambio es efectivo en el
+        siguiente request autenticado del usuario objetivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID v4 del usuario objetivo (users.id).
+          schema:
+            type: string
+            format: uuid
+            example: 9f0c7a2e-4b6d-4c8a-9f2e-3a1b2c3d4e5f
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserRoleRequest'
+            examples:
+              promover:
+                summary: Promover un usuario a admin
+                value:
+                  role: admin
+      responses:
+        '204':
+          description: Rol actualizado (envelope vacío).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedGeneric'
+        '403':
+          $ref: '#/components/responses/ForbiddenGeneric'
+        '404':
+          description: El usuario objetivo no existe (`NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -1033,6 +1086,22 @@ components:
         a una identidad real (email con password, Google, magic link u OTP); `guest` = anónima
         temporal sin identidad (`POST /auth/guest`), upgradable a registered (`POST /auth/guest/upgrade`).
       example: registered
+    UserRole:
+      type: string
+      enum: [user, admin]
+      description: |
+        Rol de AUTORIZACIÓN (eje independiente de kind y del estado de moderación — doc 04 →
+        users.role): responde a "¿qué puede hacer esta cuenta?". `user` = default de creación;
+        `admin` = acceso al endpoint de gestión (`PATCH /admin/users/{id}/role`), asignado solo
+        por un admin. No se embebe en el JWT: se lee por request (1 SELECT).
+      example: user
+    SetUserRoleRequest:
+      type: object
+      required: [role]
+      additionalProperties: false
+      properties:
+        role:
+          $ref: '#/components/schemas/UserRole'
     AuthResponse:
       type: object
       required: [data]
@@ -1118,6 +1187,7 @@ components:
                 - RATE_LIMITED
                 - PASSWORD_COMPROMISED
                 - UNAUTHORIZED
+                - FORBIDDEN
                 - MALFORMED_REQUEST
                 - NOT_FOUND
                 - METHOD_NOT_ALLOWED
@@ -1179,6 +1249,22 @@ components:
                   code: INVALID_CREDENTIALS
                   message: Credenciales inválidas.
                   requestId: req_01J4X8K2YY
+    ForbiddenGeneric:
+      description: |
+        Autenticado pero sin permiso para la acción (403, `FORBIDDEN`). Genérico e idéntico para
+        cualquier intento denegado: actor sin rol admin, o actor intentando auto-rol (nunca revela
+        el porqué exacto — anti-enumeración).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            sin-permiso:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: No autorizado para esta acción.
+                  requestId: req_01J4X8K2YF
     ValidationError:
       description: Falla de validación de negocio (zod) — details por campo, preceden a cualquier verificación.
       content:

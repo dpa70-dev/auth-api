@@ -25,6 +25,7 @@ export const STATUS_BY_CODE: Record<ErrorCode, ErrorStatus> = {
   [ErrorCodes.OTP_INVALID]: 401,
   [ErrorCodes.RATE_LIMITED]: 429,
   [ErrorCodes.UNAUTHORIZED]: 401,
+  [ErrorCodes.FORBIDDEN]: 403,
   [ErrorCodes.MALFORMED_REQUEST]: 400,
   [ErrorCodes.NOT_FOUND]: 404,
   [ErrorCodes.METHOD_NOT_ALLOWED]: 405,

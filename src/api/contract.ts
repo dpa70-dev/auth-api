@@ -368,6 +368,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Asignar el rol de autorización de un usuario (user → admin o viceversa)
+         * @description Eje de autorización (doc 04 → users.role): solo un **admin** puede promover/degradar (403
+         *     `FORBIDDEN` si el actor no lo es). El actor NO puede modificarse a sí mismo (`actorId === id`
+         *     → 403 `FORBIDDEN`, evita que el último admin se degrade y deje el sistema sin admins).
+         *     No hay límite de grado/transiciones: user↔admin libre. **204** sin cuerpo. El rol NO se
+         *     embebe en el JWT (1 SELECT por request, decisión planificada): el cambio es efectivo en el
+         *     siguiente request autenticado del usuario objetivo.
+         */
+        patch: operations["setUserRole"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -515,6 +540,18 @@ export interface components {
          * @enum {string}
          */
         UserKind: "registered" | "guest";
+        /**
+         * @description Rol de AUTORIZACIÓN (eje independiente de kind y del estado de moderación — doc 04 →
+         *     users.role): responde a "¿qué puede hacer esta cuenta?". `user` = default de creación;
+         *     `admin` = acceso al endpoint de gestión (`PATCH /admin/users/{id}/role`), asignado solo
+         *     por un admin. No se embebe en el JWT: se lee por request (1 SELECT).
+         * @example user
+         * @enum {string}
+         */
+        UserRole: "user" | "admin";
+        SetUserRoleRequest: {
+            role: components["schemas"]["UserRole"];
+        };
         AuthResponse: {
             data: {
                 accessToken: components["schemas"]["AccessToken"];
@@ -557,7 +594,7 @@ export interface components {
                  *     centralizado (doc 00 → ítem 24); INTERNAL_ERROR para 500.
                  * @enum {string}
                  */
-                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "OTP_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "GUEST_UPGRADE_INVALID" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
+                code: "VALIDATION_ERROR" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_EXISTS" | "ACCOUNT_EXISTS_WITH_GOOGLE" | "EMAIL_NOT_VERIFIED" | "MAGIC_LINK_INVALID" | "OTP_INVALID" | "ACCOUNT_HAS_NO_PASSWORD" | "GUEST_UPGRADE_INVALID" | "RATE_LIMITED" | "PASSWORD_COMPROMISED" | "UNAUTHORIZED" | "FORBIDDEN" | "MALFORMED_REQUEST" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL_ERROR";
                 /** @description Mensaje legible por humanos; genérico e idéntico en 401 (anti-enumeración). */
                 message: string;
                 /** @description Opcional; estructura los errores de validación por campo y el proveedor sugerido en 409. */
@@ -598,6 +635,19 @@ export interface components {
          *     (anti-enumeración, doc 00 → ítem 41).
          */
         UnauthorizedInvalidCredentials: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description Autenticado pero sin permiso para la acción (403, `FORBIDDEN`). Genérico e idéntico para
+         *     cualquier intento denegado: actor sin rol admin, o actor intentando auto-rol (nunca revela
+         *     el porqué exacto — anti-enumeración).
+         */
+        ForbiddenGeneric: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1134,6 +1184,45 @@ export interface operations {
             };
             422: components["responses"]["ValidationError"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    setUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID v4 del usuario objetivo (users.id). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetUserRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Rol actualizado (envelope vacío). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["UnauthorizedGeneric"];
+            403: components["responses"]["ForbiddenGeneric"];
+            /** @description El usuario objetivo no existe (`NOT_FOUND`). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalError"];
         };
     };
