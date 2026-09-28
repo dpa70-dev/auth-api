@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-scripts/
 .env
 *.log
 logs/
@@ -16,3 +17,5 @@ patches/
 exports/
 # lista generada de hashes de contraseñas comprometidas (npm run gen:password-list)
 data/
+# config local de compose (bind mount para inspeccionar la BD con DBeaver) — no se versiona
+docker-compose.override.yml

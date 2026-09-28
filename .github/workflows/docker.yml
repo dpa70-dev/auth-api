@@ -1,0 +1,146 @@
+name: Docker
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# Solo se construye al subir un tag: evita builds de prueba en cada commit a main.
+# `latest` se mueve únicamente al subir un tag, para que main no apunte a una imagen
+# que aún no ha pasado los gates de CI. `workflow_dispatch` construye y publica el
+# manifest por SHA para poder verificar la cadena en ambas arquitecturas, pero sin
+# tocar `latest` ni crear etiqueta de versión.
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}
+    # `matrix` sí está disponible en `runs-on`. Los sufijos de tag, en cambio, no
+    # pueden venir de `env`: el contexto `env` no existe dentro de `strategy`, así
+    # que se declaran en la matrix y se replican en el job `manifest`.
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # `tag_suffix` sustituye a `platform` dentro del tag. Motivo: la barra de
+        # `linux/amd64` NO es un carácter válido en un tag de Docker — BuildKit
+        # rechaza la referencia con `invalid reference format` y el job no publica
+        # nada. Charset válido: [A-Za-z0-9_][A-Za-z0-9._-]{0,127}.
+        include:
+          - platform: linux/amd64
+            tag_suffix: linux_amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            tag_suffix: linux_arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Runner NATIVO por arquitectura: sin emulación QEMU. better-sqlite3 no
+      # compila desde fuente (usa el prebuild de su plataforma), así que no hace
+      # falta cross-compilation — basta con que cada runner construya su arch.
+      # Cada job publica un tag temporal propio bajo el sufijo de la matrix; el
+      # job `manifest` los une después en un manifest list.
+      - uses: docker/build-push-action@v6
+        with:
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:sha-${{ github.sha }}-${{ matrix.tag_suffix }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+
+  # Une los manifiestos por arquitectura en una sola etiqueta multi-arch.
+  # Un `docker pull` de esa etiqueta descarga la imagen correcta según la
+  # máquina, sin que el consumidor tenga que saber nada.
+  manifest:
+    name: manifest list
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Los valores de contexto entran como VARIABLES DE ENTORNO, nunca por
+      # interpolación `${{ }}` dentro del `run:`. `github.ref_name` es el nombre
+      # del tag, controlable por quien hace push; interpolarlo directamente en el
+      # script es el patrón que permite inyección de comandos.
+      GIT_SHA: ${{ github.sha }}
+      REF_NAME: ${{ github.ref_name }}
+      # `true` solo al subir un tag v*: es lo que autoriza a mover `latest` y a
+      # crear la etiqueta de versión. En `workflow_dispatch` vale `false`, y en
+      # `github.ref_name` habría una rama — publicarla como etiqueta apuntaría a
+      # una imagen sin pasar por los gates de CI.
+      IS_TAG_PUSH: ${{ github.event_name == 'push' }}
+
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publicar manifest list
+        run: |
+          set -euo pipefail
+          SHA_TAG="${REGISTRY}/${IMAGE}:sha-${GIT_SHA}"
+          # Sufijos espejo de la matrix del job `build`. Si divergen, la
+          # verificación de plataformas del paso siguiente falla.
+          AM64_TAG="${SHA_TAG}-linux_amd64"
+          ARM64_TAG="${SHA_TAG}-linux_arm64"
+
+          # El tag por SHA se publica siempre: identifica el build sin depender del
+          # ref y es lo que permite comparar dos corridas. Las etiquetas de
+          # versión y `latest` solo en un push de tag.
+          create_args=(--tag "$SHA_TAG")
+          if [ "$IS_TAG_PUSH" = "true" ]; then
+            create_args+=(
+              --tag "${REGISTRY}/${IMAGE}:${REF_NAME}"
+              --tag "${REGISTRY}/${IMAGE}:latest"
+            )
+          fi
+
+          docker buildx imagetools create "${create_args[@]}" "$AM64_TAG" "$ARM64_TAG"
+
+          # Los tags temporales por digest dejan de ser necesarios — en AMBOS
+          # caminos. Sin este `rm` en la corrida manual quedarían huérfanos: el
+          # job antes se saltaba entero con `if: event == push`.
+          docker buildx imagetools rm "$AM64_TAG" "$ARM64_TAG"
+
+      - name: Verificar plataformas publicadas
+        run: |
+          set -euo pipefail
+          SHA_TAG="${REGISTRY}/${IMAGE}:sha-${GIT_SHA}"
+          inspect=$(docker buildx imagetools inspect "$SHA_TAG")
+          echo "$inspect"
+          # Un manifest con una sola arquitectura puede quedar en verde — p. ej. si
+          # `platforms:` se configurara mal y cada runner construyera solo la suya.
+          # El fallo se manifestaría tarde, en el `docker pull` del consumidor, en
+          # la plataforma ausente. Se verifica aquí en su lugar.
+          #
+          # El sufijo `(/v[0-9]+)?` absorbe el campo *variant* de OCI: buildx
+          # reporta arm64 como `linux/arm64/v8`, no como `linux/arm64`, y una
+          # ancla `$` estricta daría por roto un manifest correcto.
+          for arch in linux/amd64 linux/arm64; do
+            if ! grep -qE "^[[:space:]]*Platform:[[:space:]]+${arch}(/v[0-9]+)?$" <<<"$inspect"; then
+              echo "::error::el manifest ${SHA_TAG} no contiene ${arch}"
+              exit 1
+            fi
+          done
+          echo "--- platforms verificadas en ${SHA_TAG} ---"
