@@ -1,7 +1,7 @@
 # Glosario de Autenticación
 
 > Términos y conceptos usados en el proceso de autenticación del proyecto
-> `signup-login-jwt-uuid-rol-api`.
+> `auth-api`.
 
 ---
 

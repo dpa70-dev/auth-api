@@ -1,7 +1,7 @@
 {
-  "name": "signup-login-jwt-uuid-rol-api",
+  "name": "auth-api",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "API signup/login con JWT, UUID y roles — fase 3 (SDD contra docs/03-openapi.yaml)",
   "engines": {
@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
+    "build:scripts": "tsc -p tsconfig.scripts.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -17,6 +18,7 @@
     "contract": "openapi-typescript docs/03-openapi.yaml -o src/api/contract.ts",
     "gen:password-list": "tsx scripts/topPasswords.ts",
     "promote:admin": "tsx scripts/promoteAdmin.ts",
+    "promote:admin:dist": "node dist-scripts/scripts/promoteAdmin.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "lint": "eslint ."

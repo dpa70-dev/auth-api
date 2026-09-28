@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Gates de calidad del proyecto (docs/00 §10): typecheck, lint y tests.
+      - run: npm run typecheck
+      - run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      # Auditoría del árbol de PRODUCCIÓN: las dependencias dev (p. ej. js-yaml vía
+      # @redocly/openapi-core, arrastrado por drizzle-kit) no viajan al runtime.
+      - run: npm audit --omit=dev --audit-level=high

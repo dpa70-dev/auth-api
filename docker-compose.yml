@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    image: auth-api:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # Falla rápido si JWT_SECRET no está seteado en el shell:
+      #   export JWT_SECRET=$(openssl rand -base64 48)
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in your shell before running docker compose}
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      DB_PATH: /app/data/app.sqlite
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PUBLIC_API_ORIGIN: ${PUBLIC_API_ORIGIN:-http://localhost:3000}
+    volumes:
+      - api-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  api-data:
