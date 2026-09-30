@@ -25,6 +25,13 @@ jobs:
       - name: Tests
         run: npm test
 
-      # Auditoría del árbol de PRODUCCIÓN: las dependencias dev (p. ej. js-yaml vía
-      # @redocly/openapi-core, arrastrado por drizzle-kit) no viajan al runtime.
+      # Auditoría del árbol de PRODUCCIÓN: las dependencias dev no viajan al runtime.
+      #
+      # Única excepción dev conocida y aceptada: esbuild <=0.24.2, anidado bajo
+      # drizzle-kit -> @esbuild-kit/esm-loader (loader ESM legacy). El advisory
+      # GHSA-67mh-4wv8-2f99 afecta al dev-server HTTP de esbuild, no a su uso como
+      # librería de build: drizzle-kit invoca la API de esbuild, no sirve un
+      # servidor, y el esbuild que drizzle-kit usa de verdad es ^0.25.4 (fuera del
+      # rango vulnerable). Forzar el fix instalaría drizzle-kit@0.18 (2021) y
+      # arrastraría zod 3 junto a zod 4: daño mayor que el riesgo asumido.
       - run: npm audit --omit=dev --audit-level=high
