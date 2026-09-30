@@ -96,7 +96,8 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
   3. Cambios + `git commit` en la rama. Nunca en `main`.
   4. `git push -u origin <rama>` — el `-u` es necesario en la primera push de una rama nueva.
   5. Abrir PR a `main` y esperar CI en verde. El merge ocurre **en GitHub** con *Create a merge commit* (**nunca squash**, que rompería la convención `merge(...)`), mensaje `merge(<tipo>/<slug>): ...`.
-  6. `git checkout main && git pull --ff-only origin main` — el `--ff-only` hace fallar ruidosamente si algo divergió, en vez de meter un merge commit silencioso en `main`.
+  6. Si el PR aparece **"behind"** (la rama nació de un `main` anterior a otro merge): pulsar *Update branch* **primero**. Eso genera un commit `Merge branch 'main' into <rama>` cuyo nombre GitHub impone y no es editable; el mensaje del **merge final** sí se edita después del update, en el modal de confirmación. Sin ese paso extra el merge queda con el default `Merge pull request #N from ...` y se sale de la convención.
+  7. `git checkout main && git pull --ff-only origin main` — el `--ff-only` hace fallar ruidosamente si algo divergió, en vez de meter un merge commit silencioso en `main`.
 - **El historial mantiene las ramas mergeadas** (no se borran por defecto; preguntar).
 - **NUNCA commitear**: `.omo/` (artefactos del orquestador), `.env`, `*.sqlite`, `dist/`, `data/`, `patches/`, `exports/`. Ver `.gitignore`.
 - El dominio es autónomo del contrato; ante un cambio de contrato, regenerar `contract.ts` (`npm run contract`) y dejar que `tsc` detecte el drift.
