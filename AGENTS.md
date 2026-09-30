@@ -89,8 +89,15 @@ Mantras del proyecto (doc 05): *"el dominio no conoce a nadie externo"*, *"cada 
   - Tipos vistos en el historial: `feat`, `fix`, `docs`, `test`, `refactor`, `build`/`chore`, `merge`.
   - Scopes: `api`, `app`, `domain`, `infra`, `db`, `docs`, `qa`, `test`, `contract`, `auth`, etc.
   - Ejemplos reales: `feat(api): status codes derivados del contrato OpenAPI en success/error.ts` · `docs(qa): anotar conteos de vitest en docs/05`.
-- **Features van en rama `feat/<slug>` → merge `--no-ff` a `main`** con mensaje `merge(feat/<slug>): ...`. El historial mantiene las ramas mergeadas (no se borran por defecto; preguntar).
-- No commitear directo en `main` trabajo de feature (lección aprendida con `feat/contract-typed-api`).
+- **Ningun cambio llega a `main` por push directo**: `main` está protegida y todo entra por PR.
+- **Ciclo completo** (el orden importa — el primer paso evita ramificar desde un `main` obsoleto):
+  1. `git checkout main && git pull --ff-only origin main` — sincronizar **antes** de ramificar.
+  2. `git checkout -b <tipo>/<slug>` — prefijos reales: `feat/`, `fix/`, `refactor/`, `docs/`.
+  3. Cambios + `git commit` en la rama. Nunca en `main`.
+  4. `git push -u origin <rama>` — el `-u` es necesario en la primera push de una rama nueva.
+  5. Abrir PR a `main` y esperar CI en verde. El merge ocurre **en GitHub** con *Create a merge commit* (**nunca squash**, que rompería la convención `merge(...)`), mensaje `merge(<tipo>/<slug>): ...`.
+  6. `git checkout main && git pull --ff-only origin main` — el `--ff-only` hace fallar ruidosamente si algo divergió, en vez de meter un merge commit silencioso en `main`.
+- **El historial mantiene las ramas mergeadas** (no se borran por defecto; preguntar).
 - **NUNCA commitear**: `.omo/` (artefactos del orquestador), `.env`, `*.sqlite`, `dist/`, `data/`, `patches/`, `exports/`. Ver `.gitignore`.
 - El dominio es autónomo del contrato; ante un cambio de contrato, regenerar `contract.ts` (`npm run contract`) y dejar que `tsc` detecte el drift.
 
