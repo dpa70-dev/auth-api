@@ -18,6 +18,16 @@ jobs:
 
       - run: npm ci
 
+      # El contrato es la fuente de verdad (SDD): `src/api/contract.ts` es un artefacto
+      # GENERADO desde `docs/03-openapi.yaml`. Si el YAML cambia y el generado no, el
+      # typecheck valida tipos de un contrato obsoleto y el drift pasa inadvertido.
+      # Regenerar + diff contra el archivo versionado convierte ese drift en un fallo
+      # de CI. Va antes del typecheck para reportar la causa raíz primero.
+      - name: Contract drift
+        run: |
+          npm run contract
+          git diff --exit-code -- src/api/contract.ts
+
       # Gates de calidad del proyecto (docs/00 §10): typecheck, lint y tests.
       - run: npm run typecheck
       - run: npm run lint
