@@ -5,9 +5,6 @@ import { LOG_EVENTS } from './domain/port/index.js';
 import { PinoLogger } from './infra/outbound/pinoLogger.js';
 import { buildApp } from './api/appBuilder.js';
 
-export { buildApp } from './api/appBuilder.js';
-export type { AppDeps } from './api/appBuilder.js';
-
 if (config.nodeEnv !== 'test') {
   const { app, close } = buildApp();
   const bootLogger = new PinoLogger(config.nodeEnv);

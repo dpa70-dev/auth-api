@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import type { Server } from 'node:http';
-import { buildApp } from '../src/index.js';
+import { buildApp } from '../src/api/appBuilder.js';
 import type { CompromisedPasswordChecker, Logger } from '../src/domain/port/index.js';
 import { DrizzleUserRepository } from '../src/infra/db/drizzleUserRepository.js';
 import { emailSchema, type Email } from '../src/domain/vo/index.js';
