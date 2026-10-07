@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import type { Server } from 'node:http';
 import { createHash } from 'node:crypto';
-import { buildApp } from '../src/index.js';
+import { buildApp } from '../src/api/appBuilder.js';
 import type { CompromisedPasswordChecker, EmailSender, Logger } from '../src/domain/port/index.js';
 import type { Email } from '../src/domain/vo/index.js';
 
